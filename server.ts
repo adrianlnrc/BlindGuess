@@ -17,6 +17,7 @@ import {
   getLeaderboards,
   getPlayerForUser,
   getStats,
+  nextDailyResetAt,
   saveProfile,
 } from "./src/server/store.ts";
 
@@ -108,7 +109,38 @@ async function resolveProfile(
   return { profile, authenticated: true, email: user.email };
 }
 
+/** O id canônico de quem está falando, sem exigir um perfil completo. */
+async function resolvePlayerId(socket: GameSocket, fallback: unknown): Promise<string> {
+  const given = String(fallback ?? "").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 40);
+  if (!hasDatabase()) return given;
+
+  const user = await userFromCookieHeader(socket.handshake.headers.cookie);
+  if (!user) return given;
+
+  const owned = await getPlayerForUser(user.id);
+  return owned?.id ?? given;
+}
+
+/**
+ * Quantas pessoas estão com o jogo aberto, anunciado só quando o número muda.
+ * O contador do engine ainda não decrementou no instante do disconnect, então
+ * um reconciliador periódico garante que a queda apareça mesmo assim.
+ */
+let lastAnnounced = -1;
+
+function announcePresence(): void {
+  const online = io.engine.clientsCount;
+  if (online === lastAnnounced) return;
+  lastAnnounced = online;
+  io.emit("presence", { online });
+}
+
+setInterval(announcePresence, 5000).unref?.();
+
 io.on("connection", (socket: GameSocket) => {
+  announcePresence();
+  socket.on("disconnect", () => setTimeout(announcePresence, 250));
+
   socket.on("identify", (payload, ack) => {
     resolveProfile(socket, payload.profile)
       .then((resolved) => {
@@ -225,6 +257,64 @@ io.on("connection", (socket: GameSocket) => {
         console.error("[fetchStats]", err);
         ack({ stats: null });
       });
+  });
+
+  socket.on("fetchDaily", ({ profileId }, ack) => {
+    if (!hasDatabase()) {
+      return ack({ ok: false, error: "O desafio do dia precisa do banco configurado." });
+    }
+
+    rooms
+      .ensureDaily()
+      .then(async (daily) => {
+        if (!daily) {
+          return ack({
+            ok: false,
+            error: "Não consegui sortear o desafio de hoje. Confira a chave do Maps e a cota da API.",
+          });
+        }
+
+        const summary = await getChallengeSummary(daily.code);
+        if (!summary) return ack({ ok: false, error: "Desafio de hoje indisponível." });
+
+        const playerId = await resolvePlayerId(socket, profileId);
+        const mine = summary.entries.find((entry) => entry.profileId === playerId);
+
+        ack({
+          ok: true,
+          daily: {
+            day: daily.day,
+            challengeCode: daily.code,
+            rounds: summary.rounds,
+            resetsAt: nextDailyResetAt(),
+            alreadyPlayed: !!mine,
+            myScore: mine?.totalScore ?? null,
+            topEntries: summary.entries.slice(0, 5),
+          },
+        });
+      })
+      .catch((err) => fail(err, "fetchDaily", ack));
+  });
+
+  socket.on("playDaily", ({ profile }, ack) => {
+    resolveProfile(socket, profile)
+      .then(async (resolved) => {
+        if (!resolved) return ack({ ok: false, error: "Escolha um apelido." });
+
+        const daily = await rooms.ensureDaily();
+        if (!daily) {
+          return ack({ ok: false, error: "O desafio de hoje ainda não está disponível." });
+        }
+
+        const result = await rooms.playChallenge(resolved.profile, socket.id, daily.code);
+        if (!result.ok) return ack(result);
+
+        socket.data = { playerId: result.playerId, roomCode: result.code };
+        socket.join(result.code);
+        ack(result);
+        push(socket);
+      })
+      .catch((err) => fail(err, "playDaily", ack));
   });
 
   socket.on("fetchLeaderboards", (ack) => {

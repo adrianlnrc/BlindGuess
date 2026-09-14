@@ -6,18 +6,28 @@ import { signOut } from "next-auth/react";
 import { useCallback, useEffect, useState } from "react";
 import Avatar from "@/components/Avatar";
 import AvatarEditor from "@/components/AvatarEditor";
+import DailyCard from "@/components/DailyCard";
+import LevelBadge from "@/components/LevelBadge";
 import StreakBadge from "@/components/StreakBadge";
 import { loadProfile, saveProfileLocal } from "@/lib/profile";
 import { getSocket, rememberPlayer } from "@/lib/socket";
-import type { Avatar as AvatarType, PlayerProfile, ProfileStats } from "@/lib/types";
+import type {
+  Avatar as AvatarType,
+  DailyInfo,
+  PlayerProfile,
+  ProfileStats,
+} from "@/lib/types";
 
-type Mode = "solo" | "party" | "challenge";
+type Mode = "solo" | "party" | "challenge" | "daily";
 
 export default function HomePage() {
   const router = useRouter();
   const [profile, setProfile] = useState<PlayerProfile | null>(null);
   const [stats, setStats] = useState<ProfileStats | null>(null);
   const [account, setAccount] = useState<{ authenticated: boolean; email: string | null } | null>(null);
+  const [daily, setDaily] = useState<DailyInfo | null>(null);
+  const [dailyError, setDailyError] = useState<string | null>(null);
+  const [online, setOnline] = useState<number | null>(null);
   const [editing, setEditing] = useState(false);
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState<Mode | "join" | null>(null);
@@ -47,13 +57,22 @@ export default function HomePage() {
         }
 
         socket.emit("fetchStats", { profileId: res.profile.id }, (r) => setStats(r.stats));
+
+        socket.emit("fetchDaily", { profileId: res.profile.id }, (r) => {
+          if (r.ok) setDaily(r.daily);
+          else setDailyError(r.error);
+        });
       });
     };
 
+    const onPresence = ({ online: count }: { online: number }) => setOnline(count);
+
     identify();
     socket.on("connect", identify);
+    socket.on("presence", onPresence);
     return () => {
       socket.off("connect", identify);
+      socket.off("presence", onPresence);
     };
     // Reidentifica quando a identidade muda, não a cada tecla no apelido.
   }, [profile?.id]);
@@ -114,8 +133,14 @@ export default function HomePage() {
         if (res.ok) enter(res.code, res.playerId);
         else setError(res.error);
       });
-    } else {
+    } else if (mode === "challenge") {
       getSocket().emit("createChallenge", payload, (res) => {
+        setBusy(null);
+        if (res.ok) enter(res.code, res.playerId);
+        else setError(res.error);
+      });
+    } else {
+      getSocket().emit("playDaily", payload, (res) => {
         setBusy(null);
         if (res.ok) enter(res.code, res.playerId);
         else setError(res.error);
@@ -142,8 +167,10 @@ export default function HomePage() {
       <header className="flex flex-wrap items-start justify-between gap-6">
         <div className="space-y-3">
           <span className="inline-flex items-center gap-2 rounded-full border border-ink-600 bg-ink-900/60 px-3 py-1 text-xs font-medium tracking-widest text-beam-400 uppercase">
-            <span className="size-1.5 rounded-full bg-beam-400" />
-            sozinho, com amigos ou por desafio
+            <span className="size-1.5 animate-pulse rounded-full bg-beam-400" />
+            {online !== null
+              ? `${online} ${online === 1 ? "pessoa jogando" : "pessoas jogando"}`
+              : "sozinho, com amigos ou por desafio"}
           </span>
           <h1 className="text-5xl font-black tracking-tight sm:text-6xl">
             Blind<span className="text-beam-400">Guess</span>
@@ -186,6 +213,8 @@ export default function HomePage() {
         <div className="flex flex-wrap items-center gap-4">
           <Avatar avatar={profile.avatar} size={64} className="rounded-xl" />
 
+          {stats && <LevelBadge xp={stats.totalScore} />}
+
           <div className="min-w-48 flex-1">
             <label htmlFor="nickname" className="text-xs tracking-widest text-mist-300 uppercase">
               Seu apelido
@@ -224,6 +253,14 @@ export default function HomePage() {
           </dl>
         )}
       </section>
+
+      <DailyCard
+        daily={daily}
+        error={dailyError}
+        loading={!daily && !dailyError}
+        disabled={!ready}
+        onPlay={() => start("daily")}
+      />
 
       {/* Modos */}
       <section className="grid gap-4 sm:grid-cols-3">

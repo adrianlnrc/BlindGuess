@@ -26,6 +26,43 @@ export function today(at: Date = new Date()): string {
   }).format(at);
 }
 
+/** Quando o desafio de amanha abre, em ms epoch. */
+export function nextDailyResetAt(at: Date = new Date()): number {
+  const offsetMs = tzOffsetMs(STREAK_TZ, at);
+  const tomorrow = new Date(Date.parse(`${today(at)}T00:00:00Z`) + 86_400_000);
+  return Date.parse(`${tomorrow.toISOString().slice(0, 10)}T00:00:00Z`) - offsetMs;
+}
+
+/** Diferenca entre o fuso configurado e o UTC no instante dado. */
+function tzOffsetMs(timeZone: string, at: Date): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour12: false,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  })
+    .formatToParts(at)
+    .reduce<Record<string, string>>((acc, part) => {
+      acc[part.type] = part.value;
+      return acc;
+    }, {});
+
+  const asUtc = Date.UTC(
+    Number(parts.year),
+    Number(parts.month) - 1,
+    Number(parts.day),
+    Number(parts.hour) % 24,
+    Number(parts.minute),
+    Number(parts.second),
+  );
+
+  return asUtc - at.getTime();
+}
+
 function daysBetween(from: string, to: string): number {
   return Math.round(
     (Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000,
@@ -249,15 +286,30 @@ export async function recordGame(input: {
     }
 
     if (input.challengeCode) {
-      // Uma entrada por pessoa: só sobrescreve se a marca nova for melhor.
-      await db.query(
-        `INSERT INTO challenge_entries (challenge_code, player_id, total_score)
-         VALUES ($1, $2, $3)
-         ON CONFLICT (challenge_code, player_id) DO UPDATE
-           SET total_score = EXCLUDED.total_score, played_at = now()
-         WHERE challenge_entries.total_score < EXCLUDED.total_score`,
-        [input.challengeCode, input.profile.id, input.totalScore],
+      const kind = await db.query<{ single_attempt: boolean }>(
+        `SELECT single_attempt FROM challenges WHERE code = $1`,
+        [input.challengeCode],
       );
+
+      if (kind.rows[0]?.single_attempt) {
+        // Desafio do dia: vale a primeira tentativa, e só ela.
+        await db.query(
+          `INSERT INTO challenge_entries (challenge_code, player_id, total_score)
+           VALUES ($1, $2, $3)
+           ON CONFLICT (challenge_code, player_id) DO NOTHING`,
+          [input.challengeCode, input.profile.id, input.totalScore],
+        );
+      } else {
+        // Desafio avulso: uma entrada por pessoa, guardando a melhor marca.
+        await db.query(
+          `INSERT INTO challenge_entries (challenge_code, player_id, total_score)
+           VALUES ($1, $2, $3)
+           ON CONFLICT (challenge_code, player_id) DO UPDATE
+             SET total_score = EXCLUDED.total_score, played_at = now()
+           WHERE challenge_entries.total_score < EXCLUDED.total_score`,
+          [input.challengeCode, input.profile.id, input.totalScore],
+        );
+      }
     }
 
     await db.query("COMMIT");
@@ -330,6 +382,7 @@ export async function createChallenge(input: {
   creator: PlayerProfile;
   settings: RoomSettings;
   locations: PickedLocation[];
+  singleAttempt?: boolean;
 }): Promise<string> {
   const db = getPool();
 
@@ -342,10 +395,16 @@ export async function createChallenge(input: {
     ).join("");
 
     const { rowCount } = await db.query(
-      `INSERT INTO challenges (code, creator_id, settings, locations)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO challenges (code, creator_id, settings, locations, single_attempt)
+       VALUES ($1, $2, $3, $4, $5)
        ON CONFLICT (code) DO NOTHING`,
-      [code, input.creator.id, JSON.stringify(input.settings), JSON.stringify(input.locations)],
+      [
+        code,
+        input.creator.id,
+        JSON.stringify(input.settings),
+        JSON.stringify(input.locations),
+        input.singleAttempt ?? false,
+      ],
     );
 
     if (rowCount) return code;
@@ -354,16 +413,21 @@ export async function createChallenge(input: {
   throw new Error("Não consegui gerar um código de desafio livre.");
 }
 
-export async function getChallenge(
-  code: string,
-): Promise<{ code: string; creatorName: string; settings: RoomSettings; locations: PickedLocation[] } | null> {
+export async function getChallenge(code: string): Promise<{
+  code: string;
+  creatorName: string;
+  settings: RoomSettings;
+  locations: PickedLocation[];
+  singleAttempt: boolean;
+} | null> {
   const { rows } = await getPool().query<{
     code: string;
     creator_name: string | null;
     settings: RoomSettings;
     locations: PickedLocation[];
+    single_attempt: boolean;
   }>(
-    `SELECT c.code, p.name AS creator_name, c.settings, c.locations
+    `SELECT c.code, p.name AS creator_name, c.settings, c.locations, c.single_attempt
        FROM challenges c
        LEFT JOIN players p ON p.id = c.creator_id
       WHERE c.code = $1`,
@@ -378,7 +442,45 @@ export async function getChallenge(
     creatorName: row.creator_name ?? "alguém",
     settings: row.settings,
     locations: row.locations,
+    singleAttempt: row.single_attempt,
   };
+}
+
+/** Se o jogador ja tem entrada neste desafio. */
+export async function hasPlayedChallenge(code: string, playerId: string): Promise<boolean> {
+  const { rowCount } = await getPool().query(
+    `SELECT 1 FROM challenge_entries WHERE challenge_code = $1 AND player_id = $2`,
+    [code, playerId],
+  );
+  return !!rowCount;
+}
+
+// ------------------------------------------------------------ desafio do dia
+
+export async function getDailyCode(day: string): Promise<string | null> {
+  const { rows } = await getPool().query<{ challenge_code: string }>(
+    `SELECT challenge_code FROM daily_challenges WHERE day = $1`,
+    [day],
+  );
+  return rows[0]?.challenge_code ?? null;
+}
+
+/**
+ * Fixa o desafio do dia. Se dois jogadores abrirem o jogo ao mesmo tempo e os
+ * dois sortearem locais, o primeiro a gravar ganha e o outro adota o dele —
+ * todo mundo joga exatamente os mesmos lugares.
+ */
+export async function setDailyCode(day: string, code: string): Promise<string> {
+  const db = getPool();
+
+  await db.query(
+    `INSERT INTO daily_challenges (day, challenge_code) VALUES ($1, $2)
+     ON CONFLICT (day) DO NOTHING`,
+    [day, code],
+  );
+
+  const winner = await getDailyCode(day);
+  return winner ?? code;
 }
 
 export async function getChallengeSummary(code: string): Promise<ChallengeSummary | null> {
@@ -391,9 +493,10 @@ export async function getChallengeSummary(code: string): Promise<ChallengeSummar
     settings: RoomSettings;
     rounds: number;
     created_at: Date;
+    single_attempt: boolean;
   }>(
     `SELECT c.code, p.name AS creator_name, p.avatar AS creator_avatar, c.settings,
-            jsonb_array_length(c.locations) AS rounds, c.created_at
+            jsonb_array_length(c.locations) AS rounds, c.created_at, c.single_attempt
        FROM challenges c
        LEFT JOIN players p ON p.id = c.creator_id
       WHERE c.code = $1`,
@@ -426,6 +529,7 @@ export async function getChallengeSummary(code: string): Promise<ChallengeSummar
     settings: row.settings,
     rounds: Number(row.rounds),
     createdAt: row.created_at.getTime(),
+    singleAttempt: row.single_attempt,
     entries: entries.rows.map((e) => ({
       profileId: e.player_id,
       name: e.name,

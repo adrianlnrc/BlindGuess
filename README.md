@@ -18,11 +18,22 @@ letras e todo mundo joga as mesmas rodadas ao mesmo tempo, com placar ao vivo.
 Toda partida livre (solo ou em grupo) também vira um desafio compartilhável no fim —
 o link reaproveita os locais que acabaram de ser jogados.
 
+### Desafio do dia
+
+Cinco lugares iguais para todo mundo, trocando na virada do dia. **Uma tentativa só** —
+não dá para repetir até acertar, então a marca de cada um vale. Os locais são sorteados
+na primeira vez que alguém abre o desafio no dia e ficam fixos a partir daí; se duas
+pessoas abrirem ao mesmo tempo, o banco decide qual conjunto vale e as duas jogam o mesmo.
+
+O fuso que define a virada é o `BLINDGUESS_TIMEZONE`.
+
 ## Progressão
 
 - **Streak diário**: jogar pelo menos uma partida por dia mantém a ofensiva viva. Jogar
   várias vezes no mesmo dia não infla o contador; ficar um dia fora zera, mas o recorde
   histórico fica guardado. O "dia" usa o fuso de `BLINDGUESS_TIMEZONE`.
+- **Nível**: os pontos acumulados viram XP numa curva quadrática — nível 2 em 2.500 pontos,
+  3 em 10.000, 21 em 1 milhão. Sobe rápido no começo e vira maratona depois.
 - **Ranking** (`/ranking`): melhores partidas solo e as ofensivas mais longas.
 - **Perfil**: apelido e personagem ficam no navegador (`localStorage`) e acompanham você
   entre partidas — é o que amarra streak, ranking e avatar.
@@ -63,6 +74,7 @@ resultados de cada rodada, no placar final e nos rankings.
   em linha reta — acertar na mosca dá 5.000, errar meio planeta dá ~0.
 - **Rodada fecha** quando todo mundo palpita ou quando o cronômetro zera (o servidor é a
   autoridade do tempo, não o navegador).
+- **Contador de presença**: quantas pessoas estão com o jogo aberto, ao vivo.
 - **Reconexão**: se você atualizar a página ou cair no meio da partida, volta para a mesma
   sala com a pontuação intacta.
 
@@ -145,6 +157,7 @@ src/lib/scoring.ts        haversine + fórmula de pontuação
 src/lib/types.ts          contratos compartilhados entre cliente e servidor
 src/lib/useRoom.ts        hook que sincroniza o estado da sala no cliente
 src/lib/profile.ts        perfil e avatar no localStorage
+src/lib/level.ts          curva de XP e nível
 src/components/           Street View, mapa de palpite, lobby, avatar, resultados
 ```
 

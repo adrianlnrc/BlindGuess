@@ -126,7 +126,17 @@ export async function migrate(): Promise<void> {
       PRIMARY KEY (challenge_code, player_id)
     );
 
+    -- Desafio do dia: um por data, o mesmo para todo mundo.
+    CREATE TABLE IF NOT EXISTS daily_challenges (
+      day DATE PRIMARY KEY,
+      challenge_code TEXT NOT NULL REFERENCES challenges(code) ON DELETE CASCADE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
     CREATE INDEX IF NOT EXISTS solo_entries_score_idx ON solo_entries (score DESC);
     CREATE INDEX IF NOT EXISTS players_streak_idx ON players (streak_current DESC, streak_longest DESC);
+
+    -- Uma tentativa só: vale para o desafio do dia, não para os avulsos.
+    ALTER TABLE challenges ADD COLUMN IF NOT EXISTS single_attempt BOOLEAN NOT NULL DEFAULT false;
   `);
 }

@@ -13,7 +13,15 @@ import {
   type RoundResult,
 } from "@/lib/types";
 import { pickLocation, type PickedLocation } from "./locations";
-import { createChallenge, getChallenge, recordGame } from "./store";
+import {
+  createChallenge,
+  getChallenge,
+  getDailyCode,
+  hasPlayedChallenge,
+  recordGame,
+  setDailyCode,
+  today,
+} from "./store";
 
 type InternalPlayer = Player & { socketId: string | null; profile: PlayerProfile };
 
@@ -46,6 +54,23 @@ type Room = {
   error?: string;
   /** Ultima interacao, usada para limpar salas abandonadas. */
   touchedAt: number;
+};
+
+/** O desafio do dia é igual para todo mundo, então a configuração é fixa. */
+export const DAILY_SETTINGS: RoomSettings = {
+  rounds: 5,
+  roundSeconds: 120,
+  region: "world",
+  allowMove: true,
+  allowPan: true,
+  allowZoom: true,
+};
+
+/** Autor do desafio do dia, para ele não aparecer como criação de um jogador. */
+const DAILY_AUTHOR: PlayerProfile = {
+  id: "desafio-do-dia",
+  name: "Desafio do dia",
+  avatar: { ...DEFAULT_AVATAR, outfit: "#ffb454", accent: "#35d6a4", hat: "explorer" },
 };
 
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -244,6 +269,30 @@ export class RoomManager {
     return { ok: true, code, playerId, challengeCode };
   }
 
+  /**
+   * Devolve o desafio de hoje, sorteando os locais na primeira vez que alguem
+   * pede no dia. Se dois jogadores pedirem ao mesmo tempo, o banco decide qual
+   * vale e os dois jogam o mesmo.
+   */
+  async ensureDaily(): Promise<{ code: string; day: string } | null> {
+    const day = today();
+
+    const existing = await getDailyCode(day);
+    if (existing) return { code: existing, day };
+
+    const locations = await this.prepareLocations(DAILY_SETTINGS);
+    if (!locations) return null;
+
+    const code = await createChallenge({
+      creator: DAILY_AUTHOR,
+      settings: DAILY_SETTINGS,
+      locations,
+      singleAttempt: true,
+    });
+
+    return { code: await setDailyCode(day, code), day };
+  }
+
   /** Abre uma sala com os locais exatos de um desafio ja existente. */
   async playChallenge(
     profile: PlayerProfile,
@@ -252,6 +301,11 @@ export class RoomManager {
   ): Promise<{ ok: true; code: string; playerId: string } | { ok: false; error: string }> {
     const challenge = await getChallenge(challengeCode);
     if (!challenge) return { ok: false, error: "Desafio não encontrado." };
+
+    // Desafio do dia: uma tentativa por pessoa, sem repetir para melhorar.
+    if (challenge.singleAttempt && (await hasPlayedChallenge(challenge.code, profile.id))) {
+      return { ok: false, error: "Você já jogou o desafio de hoje. Volte amanhã." };
+    }
 
     const { code, playerId } = this.createRoom(profile, socketId, {
       mode: "challenge",

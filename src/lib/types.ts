@@ -85,7 +85,21 @@ export type ChallengeSummary = {
   settings: RoomSettings;
   rounds: number;
   createdAt: number;
+  /** Desafio do dia: vale só a primeira tentativa. */
+  singleAttempt: boolean;
   entries: ChallengeEntry[];
+};
+
+/** Estado do desafio do dia para este jogador. */
+export type DailyInfo = {
+  day: string;
+  challengeCode: string;
+  rounds: number;
+  /** Quando o desafio de amanhã abre (ms epoch). */
+  resetsAt: number;
+  alreadyPlayed: boolean;
+  myScore: number | null;
+  topEntries: ChallengeEntry[];
 };
 
 export type ChallengeEntry = {
@@ -155,6 +169,8 @@ export type RoomState = {
 export type ServerToClientEvents = {
   state: (state: RoomState) => void;
   errorMessage: (message: string) => void;
+  /** Quantas pessoas estão com o jogo aberto agora. */
+  presence: (payload: { online: number }) => void;
 };
 
 type RoomAck = (
@@ -193,6 +209,13 @@ export type ClientToServerEvents = {
     ack: (res: { stats: ProfileStats | null }) => void,
   ) => void;
   fetchLeaderboards: (ack: (res: { leaderboards: Leaderboards }) => void) => void;
+  /** Estado do desafio do dia (sorteia os locais na primeira vez do dia). */
+  fetchDaily: (
+    payload: { profileId: string },
+    ack: (res: { ok: true; daily: DailyInfo } | { ok: false; error: string }) => void,
+  ) => void;
+  /** Abre uma sala com o desafio do dia. */
+  playDaily: (payload: { profile: PlayerProfile }, ack: RoomAck) => void;
   updateSettings: (payload: { settings: Partial<RoomSettings> }) => void;
   startGame: () => void;
   submitGuess: (payload: { position: LatLng }) => void;
