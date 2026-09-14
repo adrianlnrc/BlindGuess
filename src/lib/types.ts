@@ -51,7 +51,7 @@ export type PlayerProfile = {
   avatar: Avatar;
 };
 
-export type GameMode = "party" | "solo" | "challenge";
+export type GameMode = "party" | "solo" | "challenge" | "duel";
 
 export type Player = {
   id: string;
@@ -74,6 +74,18 @@ export type RoundResult = {
   round: number;
   target: LatLng;
   guesses: Guess[];
+  /** Só no duelo: quem levou dano e quanto. */
+  damage?: { playerId: string; amount: number; multiplier: number } | null;
+};
+
+/** Estado do duelo 1v1. */
+export type DuelState = {
+  startHp: number;
+  hp: Record<string, number>;
+  /** Multiplicador de dano da rodada atual. */
+  multiplier: number;
+  /** Definido quando o duelo acaba. */
+  winnerId: string | null;
 };
 
 export type RoomPhase = "lobby" | "playing" | "round-result" | "finished";
@@ -126,6 +138,8 @@ export type ProfileStats = {
   roundsPlayed: number;
   bestSoloScore: number;
   totalScore: number;
+  duelWins: number;
+  duelLosses: number;
   streak: StreakInfo;
 };
 
@@ -153,6 +167,8 @@ export type RoomState = {
   challenge: { code: string; creatorName: string } | null;
   /** Codigo de desafio gerado a partir desta partida, se houver. */
   sharedChallengeCode: string | null;
+  /** Preenchido apenas no modo duelo. */
+  duel: DuelState | null;
   settings: RoomSettings;
   players: Player[];
   round: number;
@@ -216,6 +232,8 @@ export type ClientToServerEvents = {
   ) => void;
   /** Abre uma sala com o desafio do dia. */
   playDaily: (payload: { profile: PlayerProfile }, ack: RoomAck) => void;
+  /** Cria uma sala de duelo 1v1 (o adversário entra pelo código). */
+  createDuel: (payload: { profile: PlayerProfile; settings?: Partial<RoomSettings> }, ack: RoomAck) => void;
   updateSettings: (payload: { settings: Partial<RoomSettings> }) => void;
   startGame: () => void;
   submitGuess: (payload: { position: LatLng }) => void;

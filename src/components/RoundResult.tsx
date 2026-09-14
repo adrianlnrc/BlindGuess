@@ -1,6 +1,7 @@
 "use client";
 
 import Avatar from "./Avatar";
+import DuelBars from "./DuelBars";
 import ResultMap, { PLAYER_COLORS } from "./ResultMap";
 import { formatDistance } from "@/lib/scoring";
 import type { RoomState } from "@/lib/types";
@@ -16,7 +17,9 @@ export default function RoundResult({ state, playerId, isHost, onNext }: Props) 
   const result = state.lastResult;
   if (!result) return null;
 
-  const isLastRound = result.round >= state.settings.rounds;
+  const isLastRound = state.duel
+    ? !!state.duel.winnerId
+    : result.round >= state.settings.rounds;
   const missing = state.players.filter((p) => !result.guesses.some((g) => g.playerId === p.id));
   const avatarOf = (id: string) => state.players.find((p) => p.id === id)?.avatar;
 
@@ -29,10 +32,37 @@ export default function RoundResult({ state, playerId, isHost, onNext }: Props) 
       <aside className="flex h-1/2 w-full flex-col gap-4 overflow-y-auto border-t border-ink-700 bg-ink-900/80 p-6 lg:h-full lg:w-96 lg:border-t-0 lg:border-l">
         <header>
           <p className="text-xs tracking-widest text-mist-300 uppercase">
-            Rodada {result.round} de {state.settings.rounds}
+            {state.duel ? `Rodada ${result.round}` : `Rodada ${result.round} de ${state.settings.rounds}`}
           </p>
           <h2 className="text-2xl font-bold">Resultado</h2>
         </header>
+
+        {state.duel && (
+          <section className="rounded-xl border border-ink-700 p-4">
+            <DuelBars
+              duel={state.duel}
+              players={state.players}
+              meId={playerId}
+              hitId={result.damage?.playerId ?? null}
+            />
+
+            <p className="mt-3 text-center text-sm">
+              {result.damage ? (
+                <>
+                  <strong className="text-rose-signal">
+                    −{result.damage.amount.toLocaleString("pt-BR")} de vida
+                  </strong>{" "}
+                  <span className="text-mist-300">
+                    para {state.players.find((p) => p.id === result.damage!.playerId)?.name} · dano ×
+                    {result.damage.multiplier}
+                  </span>
+                </>
+              ) : (
+                <span className="text-mist-300">Empate na rodada — ninguém perdeu vida.</span>
+              )}
+            </p>
+          </section>
+        )}
 
         <ol className="space-y-2">
           {result.guesses.map((guess, index) => (
@@ -108,7 +138,7 @@ export default function RoundResult({ state, playerId, isHost, onNext }: Props) 
             onClick={onNext}
             className="mt-auto rounded-xl bg-beam-500 px-4 py-3 text-lg font-bold text-ink-950 transition hover:bg-beam-400"
           >
-            {isLastRound ? "Ver placar final" : "Próxima rodada"}
+            {isLastRound ? (state.duel ? "Ver o resultado" : "Ver placar final") : "Próxima rodada"}
           </button>
         ) : (
           <p className="mt-auto text-center text-mist-300">Esperando o anfitrião continuar…</p>

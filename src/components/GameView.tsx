@@ -1,5 +1,6 @@
 "use client";
 
+import DuelBars from "./DuelBars";
 import GuessMap from "./GuessMap";
 import StreetView from "./StreetView";
 import { useCountdown } from "@/lib/useRoom";
@@ -37,7 +38,7 @@ export default function GameView({ state, playerId, onGuess }: Props) {
           <p className="text-xs tracking-widest text-mist-300 uppercase">Rodada</p>
           <p className="text-xl font-bold">
             {state.round}
-            <span className="text-mist-300">/{state.settings.rounds}</span>
+            {!state.duel && <span className="text-mist-300">/{state.settings.rounds}</span>}
           </p>
         </div>
 
@@ -56,13 +57,27 @@ export default function GameView({ state, playerId, onGuess }: Props) {
           </div>
         )}
 
-        <div className="panel max-w-48 rounded-xl px-4 py-2.5">
-          <p className="text-xs tracking-widest text-mist-300 uppercase">Palpitaram</p>
-          <p className="text-xl font-bold">
-            {state.submitted.length}
-            <span className="text-mist-300">/{state.players.filter((p) => p.connected).length}</span>
-          </p>
-        </div>
+        {state.duel ? (
+          <div className="panel pointer-events-auto w-64 rounded-xl px-4 py-3">
+            <div className="mb-2 flex items-baseline justify-between">
+              <p className="text-xs tracking-widest text-mist-300 uppercase">Duelo</p>
+              <p className="text-xs font-semibold text-flare-400">
+                dano ×{state.duel.multiplier}
+              </p>
+            </div>
+            <DuelBars duel={state.duel} players={state.players} meId={playerId} compact />
+          </div>
+        ) : (
+          <div className="panel max-w-48 rounded-xl px-4 py-2.5">
+            <p className="text-xs tracking-widest text-mist-300 uppercase">Palpitaram</p>
+            <p className="text-xl font-bold">
+              {state.submitted.length}
+              <span className="text-mist-300">
+                /{state.players.filter((p) => p.connected).length}
+              </span>
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Mapa de palpite */}

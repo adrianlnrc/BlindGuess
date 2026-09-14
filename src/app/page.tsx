@@ -18,7 +18,7 @@ import type {
   ProfileStats,
 } from "@/lib/types";
 
-type Mode = "solo" | "party" | "challenge" | "daily";
+type Mode = "solo" | "party" | "challenge" | "daily" | "duel";
 
 export default function HomePage() {
   const router = useRouter();
@@ -129,6 +129,12 @@ export default function HomePage() {
       });
     } else if (mode === "party") {
       getSocket().emit("createRoom", payload, (res) => {
+        setBusy(null);
+        if (res.ok) enter(res.code, res.playerId);
+        else setError(res.error);
+      });
+    } else if (mode === "duel") {
+      getSocket().emit("createDuel", payload, (res) => {
         setBusy(null);
         if (res.ok) enter(res.code, res.playerId);
         else setError(res.error);
@@ -263,7 +269,7 @@ export default function HomePage() {
       />
 
       {/* Modos */}
-      <section className="grid gap-4 sm:grid-cols-3">
+      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <ModeCard
           title="Jogar solo"
           description="Partida sozinho. A pontuação entra no ranking e conta pro seu streak."
@@ -272,6 +278,14 @@ export default function HomePage() {
           disabled={!ready}
           loading={busy === "solo"}
           onClick={() => start("solo")}
+        />
+        <ModeCard
+          title="Duelo 1v1"
+          description="Vida contra vida: quem chutar mais longe perde a diferença em pontos de vida."
+          action="Criar duelo"
+          disabled={!ready}
+          loading={busy === "duel"}
+          onClick={() => start("duel")}
         />
         <ModeCard
           title="Sala com amigos"

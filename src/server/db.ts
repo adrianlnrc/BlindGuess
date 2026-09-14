@@ -138,5 +138,9 @@ export async function migrate(): Promise<void> {
 
     -- Uma tentativa só: vale para o desafio do dia, não para os avulsos.
     ALTER TABLE challenges ADD COLUMN IF NOT EXISTS single_attempt BOOLEAN NOT NULL DEFAULT false;
+
+    -- Cartel de duelos.
+    ALTER TABLE players ADD COLUMN IF NOT EXISTS duel_wins INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE players ADD COLUMN IF NOT EXISTS duel_losses INTEGER NOT NULL DEFAULT 0;
   `);
 }

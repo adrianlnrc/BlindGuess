@@ -59,9 +59,15 @@ export default function Lobby({
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-sm tracking-widest text-mist-300 uppercase">
-            {mode === "solo" ? "Partida solo" : mode === "challenge" ? "Desafio" : "Sala"}
+            {mode === "solo"
+              ? "Partida solo"
+              : mode === "challenge"
+                ? "Desafio"
+                : mode === "duel"
+                  ? "Duelo 1v1"
+                  : "Sala"}
           </p>
-          {mode === "party" ? (
+          {mode === "party" || mode === "duel" ? (
             <h1 className="text-5xl font-black tracking-[0.3em] text-beam-400">{code}</h1>
           ) : (
             <h1 className="text-4xl font-black">
@@ -70,7 +76,7 @@ export default function Lobby({
           )}
         </div>
 
-        {mode === "party" && (
+        {(mode === "party" || mode === "duel") && (
           <button
             type="button"
             onClick={copyInvite}
@@ -85,6 +91,34 @@ export default function Lobby({
         <p className="rounded-xl border border-flare-400/40 bg-flare-400/10 px-4 py-3 text-flare-400">
           {error}
         </p>
+      )}
+
+      {mode === "duel" && (
+        <section className="panel rounded-2xl p-6">
+          <h2 className="text-sm font-semibold tracking-widest text-mist-300 uppercase">
+            Duelistas ({players.length}/2)
+          </h2>
+          <ul className="mt-4 grid gap-2 sm:grid-cols-2">
+            {players.map((player) => (
+              <li
+                key={player.id}
+                className="flex items-center gap-3 rounded-xl border border-ink-700 bg-ink-950/50 px-4 py-3"
+              >
+                <Avatar avatar={player.avatar} size={36} className="rounded-lg" />
+                <span className="flex-1 truncate font-medium">{player.name}</span>
+              </li>
+            ))}
+            {players.length < 2 && (
+              <li className="flex items-center gap-3 rounded-xl border border-dashed border-ink-600 px-4 py-3 text-mist-300">
+                Esperando o adversário…
+              </li>
+            )}
+          </ul>
+          <p className="mt-4 text-sm text-mist-300">
+            Cada um começa com 6.000 de vida. A cada rodada, quem chutar mais longe perde a
+            diferença de pontos em vida — e o dano cresce conforme o duelo se arrasta.
+          </p>
+        </section>
       )}
 
       {mode === "party" && (
@@ -146,7 +180,7 @@ export default function Lobby({
         </div>
 
         <div className="grid gap-6 sm:grid-cols-2">
-          <div>
+          <div hidden={mode === "duel"}>
             <label htmlFor="rounds" className="text-sm text-mist-300">
               Rodadas: <strong className="text-mist-100">{settings.rounds}</strong>
             </label>
@@ -215,9 +249,18 @@ export default function Lobby({
         <button
           type="button"
           onClick={onStart}
-          className="rounded-2xl bg-beam-500 px-6 py-4 text-xl font-bold text-ink-950 transition hover:bg-beam-400"
+          disabled={mode === "duel" && players.length < 2}
+          className="rounded-2xl bg-beam-500 px-6 py-4 text-xl font-bold text-ink-950 transition hover:bg-beam-400 disabled:cursor-not-allowed disabled:bg-ink-700 disabled:text-mist-300"
         >
-          {mode === "solo" ? "Começar" : mode === "challenge" ? "Jogar o desafio" : "Começar partida"}
+          {mode === "solo"
+            ? "Começar"
+            : mode === "challenge"
+              ? "Jogar o desafio"
+              : mode === "duel"
+                ? players.length < 2
+                  ? "Esperando o adversário"
+                  : "Começar o duelo"
+                : "Começar partida"}
         </button>
       ) : (
         <p className="rounded-2xl border border-ink-600 px-6 py-4 text-center text-mist-300">

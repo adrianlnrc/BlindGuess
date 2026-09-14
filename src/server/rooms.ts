@@ -1,3 +1,4 @@
+import { DUEL_MAX_ROUNDS, DUEL_START_HP, damageFor, duelMultiplier } from "@/lib/duel";
 import { haversineMeters, scoreForDistance } from "@/lib/scoring";
 import {
   DEFAULT_AVATAR,
@@ -41,6 +42,9 @@ type Room = {
   playedLocations: PickedLocation[];
   /** Evita gravar a mesma partida duas vezes no store. */
   recorded: boolean;
+  /** Vida de cada jogador no duelo. */
+  hp: Map<string, number>;
+  duelWinnerId: string | null;
   settings: RoomSettings;
   players: Map<string, InternalPlayer>;
   round: number;
@@ -113,6 +117,8 @@ export class RoomManager {
       sharedChallengeCode: null,
       playedLocations: [],
       recorded: false,
+      hp: new Map(),
+      duelWinnerId: null,
       settings: sanitizeSettings({ ...DEFAULT_SETTINGS, ...options.settings }),
       players: new Map([
         [
@@ -167,9 +173,15 @@ export class RoomManager {
       }
     }
 
-    if (room.mode !== "party") return { ok: false, error: "Esta sala é de um jogador só." };
+    if (room.mode === "solo" || room.mode === "challenge") {
+      return { ok: false, error: "Esta sala é de um jogador só." };
+    }
     if (room.phase !== "lobby") return { ok: false, error: "A partida já começou." };
-    if (room.players.size >= MAX_PLAYERS) return { ok: false, error: "A sala está cheia." };
+
+    const limit = room.mode === "duel" ? 2 : MAX_PLAYERS;
+    if (room.players.size >= limit) {
+      return { ok: false, error: room.mode === "duel" ? "O duelo já tem dois jogadores." : "A sala está cheia." };
+    }
 
     const playerId = randomId();
     room.players.set(playerId, {
@@ -269,6 +281,19 @@ export class RoomManager {
     return { ok: true, code, playerId, challengeCode };
   }
 
+  /** Sala de duelo 1v1; o adversario entra pelo codigo. */
+  createDuel(
+    profile: PlayerProfile,
+    socketId: string,
+    settings?: Partial<RoomSettings>,
+  ): { code: string; playerId: string } {
+    return this.createRoom(profile, socketId, {
+      mode: "duel",
+      // No duelo quem decide o fim e a vida, nao a contagem de rodadas.
+      settings: { ...settings, rounds: DUEL_MAX_ROUNDS },
+    });
+  }
+
   /**
    * Devolve o desafio de hoje, sorteando os locais na primeira vez que alguem
    * pede no dia. Se dois jogadores pedirem ao mesmo tempo, o banco decide qual
@@ -350,6 +375,12 @@ export class RoomManager {
     const room = this.rooms.get(code);
     if (!room || room.hostId !== playerId || room.phase !== "lobby") return;
 
+    if (room.mode === "duel" && room.players.size !== 2) {
+      room.error = "O duelo precisa de exatamente dois jogadores.";
+      this.broadcast(code);
+      return;
+    }
+
     for (const player of room.players.values()) player.totalScore = 0;
     room.round = 0;
     room.usedPanos.clear();
@@ -357,6 +388,12 @@ export class RoomManager {
     room.playedLocations = [];
     room.sharedChallengeCode = null;
     room.recorded = false;
+    room.duelWinnerId = null;
+
+    room.hp.clear();
+    if (room.mode === "duel") {
+      for (const player of room.players.values()) room.hp.set(player.id, DUEL_START_HP);
+    }
 
     await this.beginRound(room);
   }
@@ -365,7 +402,17 @@ export class RoomManager {
     const room = this.rooms.get(code);
     if (!room || room.hostId !== playerId || room.phase !== "round-result") return;
 
-    if (room.round >= room.settings.rounds) {
+    if (room.mode === "duel") {
+      if (room.duelWinnerId) {
+        await this.finishGame(room);
+        return;
+      }
+      if (room.round >= DUEL_MAX_ROUNDS) {
+        this.decideDuelOnPoints(room);
+        await this.finishGame(room);
+        return;
+      }
+    } else if (room.round >= room.settings.rounds) {
       await this.finishGame(room);
       return;
     }
@@ -389,6 +436,8 @@ export class RoomManager {
     room.playedLocations = [];
     room.sharedChallengeCode = null;
     room.recorded = false;
+    room.duelWinnerId = null;
+    room.hp.clear();
     for (const player of room.players.values()) player.totalScore = 0;
 
     this.broadcast(code);
@@ -476,11 +525,50 @@ export class RoomManager {
       if (player) player.totalScore += guess.score;
     }
 
-    room.lastResult = { round: room.round, target: { ...room.target }, guesses };
+    const damage = room.mode === "duel" ? this.applyDuelDamage(room) : null;
+
+    room.lastResult = { round: room.round, target: { ...room.target }, guesses, damage };
     room.target = null;
     room.touchedAt = Date.now();
 
     this.broadcast(room.code);
+  }
+
+  /**
+   * Aplica o dano da rodada no duelo. Quem nao palpitou conta como zero, entao
+   * sumir da rodada custa caro.
+   */
+  private applyDuelDamage(room: Room): NonNullable<RoundResult["damage"]> | null {
+    const players = [...room.players.values()];
+    if (players.length !== 2) return null;
+
+    const scores = players.map((player) => ({
+      playerId: player.id,
+      score: room.guesses.get(player.id)?.score ?? 0,
+    }));
+
+    const damage = damageFor(room.round, scores);
+    if (!damage) return null;
+
+    const remaining = Math.max(0, (room.hp.get(damage.playerId) ?? DUEL_START_HP) - damage.amount);
+    room.hp.set(damage.playerId, remaining);
+
+    if (remaining <= 0) {
+      room.duelWinnerId = players.find((p) => p.id !== damage.playerId)?.id ?? null;
+    }
+
+    return damage;
+  }
+
+  /** No limite de rodadas, quem tiver mais vida leva o duelo. */
+  private decideDuelOnPoints(room: Room): void {
+    const players = [...room.players.values()];
+    if (players.length !== 2) return;
+
+    const [a, b] = players;
+    const hpA = room.hp.get(a.id) ?? 0;
+    const hpB = room.hp.get(b.id) ?? 0;
+    room.duelWinnerId = hpA === hpB ? null : hpA > hpB ? a.id : b.id;
   }
 
   /**
@@ -500,9 +588,18 @@ export class RoomManager {
           profile: player.profile,
           mode: room.mode,
           region: room.settings.region,
-          rounds: room.settings.rounds,
+          // No duelo o que vale e quantas rodadas realmente aconteceram.
+          rounds: room.mode === "duel" ? room.round : room.settings.rounds,
           totalScore: player.totalScore,
           challengeCode: room.challengeCode,
+          duelOutcome:
+            room.mode !== "duel"
+              ? null
+              : !room.duelWinnerId
+                ? "draw"
+                : room.duelWinnerId === player.id
+                  ? "win"
+                  : "loss",
         });
       } catch (err) {
         console.error("[rooms] falha ao gravar partida", err);
@@ -542,6 +639,15 @@ export class RoomManager {
         ? { code: room.challengeCode, creatorName: room.challengeCreatorName ?? "alguém" }
         : null,
       sharedChallengeCode: room.sharedChallengeCode,
+      duel:
+        room.mode === "duel"
+          ? {
+              startHp: DUEL_START_HP,
+              hp: Object.fromEntries(room.hp),
+              multiplier: duelMultiplier(Math.max(1, room.round)),
+              winnerId: room.duelWinnerId,
+            }
+          : null,
       settings: room.settings,
       players: [...room.players.values()]
         .map((player): Player => ({

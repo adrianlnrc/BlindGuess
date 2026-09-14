@@ -172,9 +172,12 @@ export async function getStats(playerId: string): Promise<ProfileStats | null> {
     streak_current: number;
     streak_longest: number;
     last_played_date: Date | null;
+    duel_wins: number;
+    duel_losses: number;
   }>(
     `SELECT id, name, avatar, games_played, rounds_played, best_solo_score,
-            total_score, streak_current, streak_longest, last_played_date
+            total_score, streak_current, streak_longest, last_played_date,
+            duel_wins, duel_losses
        FROM players WHERE id = $1`,
     [playerId],
   );
@@ -196,6 +199,8 @@ export async function getStats(playerId: string): Promise<ProfileStats | null> {
     bestSoloScore: row.best_solo_score,
     // BIGINT volta como string no driver do pg.
     totalScore: Number(row.total_score),
+    duelWins: row.duel_wins,
+    duelLosses: row.duel_losses,
     streak: {
       current: row.streak_current,
       longest: row.streak_longest,
@@ -211,11 +216,13 @@ export async function getStats(playerId: string): Promise<ProfileStats | null> {
  */
 export async function recordGame(input: {
   profile: PlayerProfile;
-  mode: "party" | "solo" | "challenge";
+  mode: "party" | "solo" | "challenge" | "duel";
   region: RegionId;
   rounds: number;
   totalScore: number;
   challengeCode?: string | null;
+  /** Resultado do duelo, quando for um. */
+  duelOutcome?: "win" | "loss" | "draw" | null;
 }): Promise<void> {
   const db = await getPool().connect();
   const day = today();
@@ -260,7 +267,9 @@ export async function recordGame(input: {
               best_solo_score = GREATEST(best_solo_score, $4),
               streak_current = $5,
               streak_longest = $6,
-              last_played_date = $7
+              last_played_date = $7,
+              duel_wins = duel_wins + $8,
+              duel_losses = duel_losses + $9
         WHERE id = $1`,
       [
         input.profile.id,
@@ -270,6 +279,8 @@ export async function recordGame(input: {
         streakCurrent,
         streakLongest,
         day,
+        input.duelOutcome === "win" ? 1 : 0,
+        input.duelOutcome === "loss" ? 1 : 0,
       ],
     );
 

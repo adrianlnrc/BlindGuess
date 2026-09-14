@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import Avatar from "./Avatar";
+import DuelBars from "./DuelBars";
 import type { RoomState } from "@/lib/types";
 
 type Props = {
@@ -26,6 +27,53 @@ export default function FinalScores({ state, playerId, isHost, onPlayAgain }: Pr
     await navigator.clipboard.writeText(`${window.location.origin}/desafio/${shareCode}`);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  }
+
+  if (state.duel) {
+    const winner = state.players.find((p) => p.id === state.duel!.winnerId) ?? null;
+    const iWon = !!winner && winner.id === playerId;
+
+    return (
+      <main className="mx-auto flex min-h-dvh w-full max-w-lg flex-col justify-center gap-8 px-6 py-12">
+        <header className="text-center">
+          <p className="text-xs tracking-widest text-mist-300 uppercase">Fim do duelo</p>
+          <h1
+            className={`text-5xl font-black ${
+              !winner ? "text-mist-100" : iWon ? "text-beam-400" : "text-rose-signal"
+            }`}
+          >
+            {!winner ? "Empate" : iWon ? "Vitória" : "Derrota"}
+          </h1>
+          <p className="mt-2 text-mist-300">
+            {winner
+              ? `${winner.name} venceu em ${state.round} ${state.round === 1 ? "rodada" : "rodadas"}.`
+              : `Ninguém zerou a vida em ${state.round} rodadas.`}
+          </p>
+        </header>
+
+        <section className="panel rounded-2xl p-5">
+          <DuelBars duel={state.duel} players={state.players} meId={playerId} />
+        </section>
+
+        <div className="flex flex-wrap gap-3">
+          {isHost && (
+            <button
+              type="button"
+              onClick={onPlayAgain}
+              className="flex-1 rounded-2xl bg-beam-500 px-6 py-4 text-lg font-bold text-ink-950 transition hover:bg-beam-400"
+            >
+              Revanche
+            </button>
+          )}
+          <Link
+            href="/"
+            className="flex-1 rounded-2xl border border-ink-600 px-6 py-4 text-center text-lg font-semibold transition hover:border-beam-500 hover:text-beam-400"
+          >
+            Sair
+          </Link>
+        </div>
+      </main>
+    );
   }
 
   return (

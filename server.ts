@@ -183,6 +183,20 @@ io.on("connection", (socket: GameSocket) => {
       .catch((err) => fail(err, "createSolo", ack));
   });
 
+  socket.on("createDuel", ({ profile, settings }, ack) => {
+    resolveProfile(socket, profile)
+      .then((resolved) => {
+        if (!resolved) return ack({ ok: false, error: "Escolha um apelido." });
+
+        const { code, playerId } = rooms.createDuel(resolved.profile, socket.id, settings);
+        socket.data = { playerId, roomCode: code };
+        socket.join(code);
+        ack({ ok: true, code, playerId });
+        push(socket);
+      })
+      .catch((err) => fail(err, "createDuel", ack));
+  });
+
   socket.on("createChallenge", ({ profile, settings }, ack) => {
     resolveProfile(socket, profile)
       .then(async (resolved) => {
