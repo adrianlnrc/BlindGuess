@@ -1,0 +1,68 @@
+"use client";
+
+import Link from "next/link";
+import { use } from "react";
+import FinalScores from "@/components/FinalScores";
+import GameView from "@/components/GameView";
+import Lobby from "@/components/Lobby";
+import RoundResult from "@/components/RoundResult";
+import { storedPlayerId } from "@/lib/socket";
+import { useRoom } from "@/lib/useRoom";
+
+export default function RoomPage({ params }: { params: Promise<{ code: string }> }) {
+  const { code: rawCode } = use(params);
+  const code = rawCode.toUpperCase();
+
+  const { state, me, status, error, updateSettings, startGame, nextRound, playAgain, submitGuess } =
+    useRoom(code);
+
+  if (status === "error") {
+    return (
+      <main className="grid min-h-dvh place-content-center gap-4 px-6 text-center">
+        <h1 className="text-3xl font-bold">Não deu para entrar na sala {code}</h1>
+        <p className="text-mist-300">{error}</p>
+        <Link
+          href="/"
+          className="mx-auto rounded-xl bg-beam-500 px-6 py-3 font-semibold text-ink-950 transition hover:bg-beam-400"
+        >
+          Voltar ao início
+        </Link>
+      </main>
+    );
+  }
+
+  if (!state) {
+    return (
+      <main className="grid min-h-dvh place-content-center gap-2 text-center">
+        <p className="text-2xl font-semibold">Conectando…</p>
+        <p className="text-mist-300">Sala {code}</p>
+      </main>
+    );
+  }
+
+  const playerId = me?.id ?? storedPlayerId(code);
+  const isHost = !!me?.isHost;
+
+  switch (state.phase) {
+    case "playing":
+      return <GameView state={state} playerId={playerId} onGuess={submitGuess} />;
+    case "round-result":
+      return <RoundResult state={state} playerId={playerId} isHost={isHost} onNext={nextRound} />;
+    case "finished":
+      return (
+        <FinalScores state={state} playerId={playerId} isHost={isHost} onPlayAgain={playAgain} />
+      );
+    default:
+      return (
+        <Lobby
+          code={state.code}
+          players={state.players}
+          settings={state.settings}
+          isHost={isHost}
+          error={state.error ?? error ?? undefined}
+          onUpdateSettings={updateSettings}
+          onStart={startGame}
+        />
+      );
+  }
+}
