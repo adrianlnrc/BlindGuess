@@ -228,7 +228,11 @@ export class RoomManager {
       };
     }
 
-    const challengeCode = createChallenge({ creator: profile, settings: finalSettings, locations });
+    const challengeCode = await createChallenge({
+      creator: profile,
+      settings: finalSettings,
+      locations,
+    });
     const { code, playerId } = this.createRoom(profile, socketId, {
       mode: "challenge",
       settings: finalSettings,
@@ -241,12 +245,12 @@ export class RoomManager {
   }
 
   /** Abre uma sala com os locais exatos de um desafio ja existente. */
-  playChallenge(
+  async playChallenge(
     profile: PlayerProfile,
     socketId: string,
     challengeCode: string,
-  ): { ok: true; code: string; playerId: string } | { ok: false; error: string } {
-    const challenge = getChallenge(challengeCode);
+  ): Promise<{ ok: true; code: string; playerId: string } | { ok: false; error: string }> {
+    const challenge = await getChallenge(challengeCode);
     if (!challenge) return { ok: false, error: "Desafio não encontrado." };
 
     const { code, playerId } = this.createRoom(profile, socketId, {
@@ -308,7 +312,7 @@ export class RoomManager {
     if (!room || room.hostId !== playerId || room.phase !== "round-result") return;
 
     if (room.round >= room.settings.rounds) {
-      this.finishGame(room);
+      await this.finishGame(room);
       return;
     }
 
@@ -425,42 +429,45 @@ export class RoomManager {
     this.broadcast(room.code);
   }
 
-  /** Encerra a partida e grava o resultado de cada jogador no store. */
-  private finishGame(room: Room): void {
+  /**
+   * Encerra a partida. Mostra o placar na hora e grava no banco em seguida —
+   * a persistencia nao pode segurar a tela dos jogadores.
+   */
+  private async finishGame(room: Room): Promise<void> {
     room.phase = "finished";
+    this.broadcast(room.code);
 
-    if (!room.recorded) {
-      room.recorded = true;
+    if (room.recorded) return;
+    room.recorded = true;
 
-      for (const player of room.players.values()) {
-        try {
-          recordGame({
-            profile: player.profile,
-            mode: room.mode,
-            region: room.settings.region,
-            rounds: room.settings.rounds,
-            totalScore: player.totalScore,
-            challengeCode: room.challengeCode,
-          });
-        } catch (err) {
-          console.error("[rooms] falha ao gravar partida", err);
-        }
+    for (const player of room.players.values()) {
+      try {
+        await recordGame({
+          profile: player.profile,
+          mode: room.mode,
+          region: room.settings.region,
+          rounds: room.settings.rounds,
+          totalScore: player.totalScore,
+          challengeCode: room.challengeCode,
+        });
+      } catch (err) {
+        console.error("[rooms] falha ao gravar partida", err);
       }
+    }
 
-      // Partida livre vira desafio compartilhavel com os mesmos locais.
-      if (!room.challengeCode && room.playedLocations.length > 0) {
-        try {
-          const host = room.players.get(room.hostId);
-          if (host) {
-            room.sharedChallengeCode = createChallenge({
-              creator: host.profile,
-              settings: { ...room.settings, rounds: room.playedLocations.length },
-              locations: room.playedLocations,
-            });
-          }
-        } catch (err) {
-          console.error("[rooms] falha ao criar desafio", err);
+    // Partida livre vira desafio compartilhavel com os mesmos locais.
+    if (!room.challengeCode && room.playedLocations.length > 0) {
+      try {
+        const host = room.players.get(room.hostId);
+        if (host) {
+          room.sharedChallengeCode = await createChallenge({
+            creator: host.profile,
+            settings: { ...room.settings, rounds: room.playedLocations.length },
+            locations: room.playedLocations,
+          });
         }
+      } catch (err) {
+        console.error("[rooms] falha ao criar desafio", err);
       }
     }
 

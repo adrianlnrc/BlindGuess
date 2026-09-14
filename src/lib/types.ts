@@ -162,6 +162,15 @@ type RoomAck = (
 ) => void;
 
 export type ClientToServerEvents = {
+  /** Diz ao servidor quem somos e recebe de volta a identidade canônica. */
+  identify: (
+    payload: { profile: PlayerProfile },
+    ack: (
+      res:
+        | { ok: true; profile: PlayerProfile; authenticated: boolean; email: string | null }
+        | { ok: false; error: string },
+    ) => void,
+  ) => void;
   createRoom: (payload: { profile: PlayerProfile }, ack: RoomAck) => void;
   joinRoom: (payload: { code: string; profile: PlayerProfile; playerId?: string }, ack: RoomAck) => void;
   /** Cria uma sala de um jogador so. */

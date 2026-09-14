@@ -27,6 +27,25 @@ o link reaproveita os locais que acabaram de ser jogados.
 - **Perfil**: apelido e personagem ficam no navegador (`localStorage`) e acompanham você
   entre partidas — é o que amarra streak, ranking e avatar.
 
+## Contas
+
+Login é **opcional**: quem entra numa sala pelo código joga como convidado, sem conta.
+Entrar serve para carregar o progresso entre aparelhos.
+
+- **Google** — OAuth no mesmo projeto do Google Cloud onde já mora a chave do Maps
+  (credencial diferente: um OAuth Client ID). Autorize o redirect
+  `https://SEU-DOMINIO/api/auth/callback/google`.
+- **Magic link** — o e-mail chega pelo Resend, sem senha.
+
+Cada forma só aparece na tela de login se estiver configurada, então dá para ligar uma
+agora e a outra depois, só mexendo nas variáveis.
+
+No primeiro login, o perfil de convidado daquele navegador é **adotado pela conta**:
+streak, pontuação e desafios continuam de onde pararam. Para quem está logado, a
+identidade vem da sessão no banco — o id que o navegador manda é ignorado, então
+ninguém escreve no ranking alheio. O WebSocket valida a sessão no handshake, lendo o
+cookie e conferindo na tabela `sessions`.
+
 ## Personagem
 
 Cada jogador monta um bonequinho próprio: tom de pele, cor da roupa, cor de detalhe,
@@ -55,7 +74,8 @@ resultados de cada rodada, no placar final e nos rankings.
 | Realtime | Socket.IO sobre um servidor Node custom (`server.ts`) |
 | Imagens | Google Maps JavaScript API — Street View + mini-mapa |
 | Estado da partida | Em memória no servidor (salas expiram em 6 h) |
-| Persistência | Arquivo JSON com escrita atômica (perfis, streaks, rankings, desafios) |
+| Persistência | Postgres (perfis, streaks, rankings, desafios, contas e sessões) |
+| Autenticação | Auth.js v5 — Google e magic link por e-mail (Resend) |
 
 ## Pré-requisitos: chave do Google Maps
 
@@ -84,9 +104,14 @@ Variáveis de ambiente:
 | --- | --- |
 | `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | Carrega o Street View e os mapas no navegador |
 | `GOOGLE_MAPS_API_KEY` | Valida os panoramas no servidor (pode ser a mesma chave) |
+| `DATABASE_URL` | Postgres. Sem ele o jogo roda, mas sem login, ranking, streak nem desafio |
+| `AUTH_SECRET` | Assina os cookies de sessão (`openssl rand -base64 32`) |
+| `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` | Login com Google (opcional) |
+| `AUTH_RESEND_KEY` / `EMAIL_FROM` | Magic link por e-mail (opcional) |
 | `PORT` | Porta do servidor (padrão `3000`) |
-| `BLINDGUESS_DATA_FILE` | Onde gravar os dados (padrão `data/blindguess.json`) |
 | `BLINDGUESS_TIMEZONE` | Fuso que define a virada do dia no streak (padrão `America/Sao_Paulo`) |
+
+O schema é criado sozinho na subida do servidor — não há passo de migração manual.
 
 ## Produção
 
@@ -100,8 +125,11 @@ serverless não mantêm conexão aberta. Use uma plataforma com processo Node de
 duração: Railway, Render, Fly.io, um VPS ou Docker. O comando de start é `npm start`
 e o processo escuta em `$PORT`.
 
-Aponte `BLINDGUESS_DATA_FILE` para um **volume persistente**. Sem isso, streaks, rankings
-e desafios somem a cada deploy, porque o disco do contêiner é efêmero.
+Adicione um **Postgres** ao projeto e aponte `DATABASE_URL` para ele (no Railway,
+`${{ Postgres.DATABASE_URL }}`). Não é preciso volume: os dados moram no banco.
+
+Lembre que `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` é embutida no bundle **em tempo de build** —
+defina as variáveis antes de buildar, ou refaça o deploy depois de mudá-las.
 
 ## Estrutura
 
@@ -110,6 +138,9 @@ server.ts                 servidor HTTP + Socket.IO, embrulha o Next
 src/server/rooms.ts       máquina de estados das salas (lobby → jogo → resultado)
 src/server/locations.ts   sorteio de locais e validação do panorama
 src/server/store.ts       persistência: perfis, streaks, rankings e desafios
+src/server/db.ts          pool do Postgres e criação do schema
+src/server/session.ts     valida a sessão do Auth.js no handshake do WebSocket
+src/auth.ts               configuração do Auth.js (Google + magic link)
 src/lib/scoring.ts        haversine + fórmula de pontuação
 src/lib/types.ts          contratos compartilhados entre cliente e servidor
 src/lib/useRoom.ts        hook que sincroniza o estado da sala no cliente
@@ -119,12 +150,12 @@ src/components/           Street View, mapa de palpite, lobby, avatar, resultado
 
 ## Limitações conhecidas
 
-- Reiniciar o servidor derruba as **salas em andamento** (o progresso já gravado —
-  streaks, rankings, desafios — sobrevive no arquivo de dados).
-- A persistência é um JSON reescrito inteiro a cada gravação: perfeito para um grupo de
-  amigos, inadequado para escala. Trocar por Postgres mexe só em `src/server/store.ts`.
-- A identidade do jogador mora no `localStorage`: limpar o navegador ou trocar de
-  aparelho começa um perfil novo, com streak zerado.
+- Reiniciar o servidor derruba as **salas em andamento** (o progresso já gravado
+  sobrevive no banco).
+- Convidado continua preso ao `localStorage`: limpar o navegador começa um perfil novo.
+  Entrar com conta resolve isso — é justamente para isso que o login existe.
+- O estado das salas vive na memória do processo, então **só funciona com uma réplica**.
+  Escalar horizontalmente exigiria um adaptador de Redis no Socket.IO.
 - O sorteio parte de pontos-semente com desvio aleatório; a variedade é boa, mas não é
   uma amostragem uniforme do planeta.
 - A cobertura do Street View é desigual — em regiões com pouca cobertura, o sorteio

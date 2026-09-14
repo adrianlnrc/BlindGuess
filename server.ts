@@ -8,11 +8,14 @@ import {
   type PlayerProfile,
   type ServerToClientEvents,
 } from "./src/lib/types.ts";
+import { getPool, hasDatabase, migrate } from "./src/server/db.ts";
 import { RoomManager } from "./src/server/rooms.ts";
+import { userFromCookieHeader } from "./src/server/session.ts";
 import {
-  flushNow,
+  claimGuest,
   getChallengeSummary,
   getLeaderboards,
+  getPlayerForUser,
   getStats,
   saveProfile,
 } from "./src/server/store.ts";
@@ -28,6 +31,13 @@ const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
 
 await app.prepare();
+
+if (hasDatabase()) {
+  await migrate();
+  console.log("> banco conectado e schema aplicado");
+} else {
+  console.warn("! DATABASE_URL não definida — login, ranking e streak ficam desligados");
+}
 
 const httpServer = createServer((req, res) => {
   handle(req, res).catch((err) => {
@@ -54,39 +64,99 @@ function push(socket: GameSocket): void {
   if (state) socket.emit("state", state);
 }
 
-io.on("connection", (socket: GameSocket) => {
-  socket.on("createRoom", ({ profile }, ack) => {
-    const clean = sanitizeProfile(profile);
-    if (!clean) return ack({ ok: false, error: "Escolha um apelido." });
+/** Erro numa ação que responde por ack, sem derrubar a conexão. */
+function fail(err: unknown, label: string, ack: (res: { ok: false; error: string }) => void): void {
+  console.error(`[${label}]`, err);
+  ack({ ok: false, error: "Algo deu errado aqui do meu lado. Tente de novo." });
+}
 
-    saveProfile(clean);
-    const { code, playerId } = rooms.createRoom(clean, socket.id);
-    socket.data = { playerId, roomCode: code };
-    socket.join(code);
-    ack({ ok: true, code, playerId });
-    push(socket);
+/**
+ * Descobre com quem estamos falando. Para quem está logado, a identidade vem
+ * do banco pela sessão — o id que o cliente manda é ignorado, senão qualquer
+ * um poderia escrever no ranking alheio. Convidado segue usando o id local.
+ */
+async function resolveProfile(
+  socket: GameSocket,
+  raw: unknown,
+): Promise<{ profile: PlayerProfile; authenticated: boolean; email: string | null } | null> {
+  const user = hasDatabase()
+    ? await userFromCookieHeader(socket.handshake.headers.cookie)
+    : null;
+
+  let clean = sanitizeProfile(raw);
+
+  // Quem acabou de entrar com o Google ainda não escolheu apelido: usa o nome da conta.
+  if (!clean && user?.name) {
+    clean = sanitizeProfile({ ...(raw as object), name: user.name });
+  }
+
+  if (!clean) return null;
+
+  if (!user) {
+    if (hasDatabase()) await saveProfile(clean).catch((err) => console.error("[profile]", err));
+    return { profile: clean, authenticated: false, email: null };
+  }
+
+  // Primeiro login: adota o perfil de convidado, preservando streak e pontos.
+  const owned =
+    (await getPlayerForUser(user.id)) ??
+    (await claimGuest(user.id, clean.id, { name: clean.name, avatar: clean.avatar }));
+
+  const profile: PlayerProfile = { id: owned.id, name: clean.name, avatar: clean.avatar };
+  await saveProfile(profile);
+
+  return { profile, authenticated: true, email: user.email };
+}
+
+io.on("connection", (socket: GameSocket) => {
+  socket.on("identify", (payload, ack) => {
+    resolveProfile(socket, payload.profile)
+      .then((resolved) => {
+        if (!resolved) return ack({ ok: false, error: "Escolha um apelido." });
+        ack({
+          ok: true,
+          profile: resolved.profile,
+          authenticated: resolved.authenticated,
+          email: resolved.email,
+        });
+      })
+      .catch((err) => fail(err, "identify", ack));
+  });
+
+  socket.on("createRoom", ({ profile }, ack) => {
+    resolveProfile(socket, profile)
+      .then((resolved) => {
+        if (!resolved) return ack({ ok: false, error: "Escolha um apelido." });
+
+        const { code, playerId } = rooms.createRoom(resolved.profile, socket.id);
+        socket.data = { playerId, roomCode: code };
+        socket.join(code);
+        ack({ ok: true, code, playerId });
+        push(socket);
+      })
+      .catch((err) => fail(err, "createRoom", ack));
   });
 
   socket.on("createSolo", ({ profile, settings }, ack) => {
-    const clean = sanitizeProfile(profile);
-    if (!clean) return ack({ ok: false, error: "Escolha um apelido." });
+    resolveProfile(socket, profile)
+      .then((resolved) => {
+        if (!resolved) return ack({ ok: false, error: "Escolha um apelido." });
 
-    saveProfile(clean);
-    const { code, playerId } = rooms.createSolo(clean, socket.id, settings);
-    socket.data = { playerId, roomCode: code };
-    socket.join(code);
-    ack({ ok: true, code, playerId });
-    push(socket);
+        const { code, playerId } = rooms.createSolo(resolved.profile, socket.id, settings);
+        socket.data = { playerId, roomCode: code };
+        socket.join(code);
+        ack({ ok: true, code, playerId });
+        push(socket);
+      })
+      .catch((err) => fail(err, "createSolo", ack));
   });
 
   socket.on("createChallenge", ({ profile, settings }, ack) => {
-    const clean = sanitizeProfile(profile);
-    if (!clean) return ack({ ok: false, error: "Escolha um apelido." });
+    resolveProfile(socket, profile)
+      .then(async (resolved) => {
+        if (!resolved) return ack({ ok: false, error: "Escolha um apelido." });
 
-    saveProfile(clean);
-    rooms
-      .createChallengeRoom(clean, socket.id, settings)
-      .then((result) => {
+        const result = await rooms.createChallengeRoom(resolved.profile, socket.id, settings);
         if (!result.ok) return ack(result);
 
         socket.data = { playerId: result.playerId, roomCode: result.code };
@@ -94,54 +164,78 @@ io.on("connection", (socket: GameSocket) => {
         ack(result);
         push(socket);
       })
-      .catch((err) => {
-        console.error("[createChallenge]", err);
-        ack({ ok: false, error: "Não consegui criar o desafio agora." });
-      });
+      .catch((err) => fail(err, "createChallenge", ack));
   });
 
   socket.on("playChallenge", ({ profile, challengeCode }, ack) => {
-    const clean = sanitizeProfile(profile);
-    if (!clean) return ack({ ok: false, error: "Escolha um apelido." });
+    resolveProfile(socket, profile)
+      .then(async (resolved) => {
+        if (!resolved) return ack({ ok: false, error: "Escolha um apelido." });
 
-    saveProfile(clean);
-    const result = rooms.playChallenge(clean, socket.id, String(challengeCode ?? "").trim());
-    if (!result.ok) return ack(result);
+        const result = await rooms.playChallenge(
+          resolved.profile,
+          socket.id,
+          String(challengeCode ?? "").trim(),
+        );
+        if (!result.ok) return ack(result);
 
-    socket.data = { playerId: result.playerId, roomCode: result.code };
-    socket.join(result.code);
-    ack(result);
-    push(socket);
-  });
-
-  socket.on("fetchChallenge", ({ code }, ack) => {
-    const challenge = getChallengeSummary(String(code ?? "").trim());
-    ack(challenge ? { ok: true, challenge } : { ok: false, error: "Desafio não encontrado." });
-  });
-
-  socket.on("fetchStats", ({ profileId }, ack) => {
-    ack({ stats: getStats(String(profileId ?? "")) });
-  });
-
-  socket.on("fetchLeaderboards", (ack) => {
-    ack({ leaderboards: getLeaderboards() });
+        socket.data = { playerId: result.playerId, roomCode: result.code };
+        socket.join(result.code);
+        ack(result);
+        push(socket);
+      })
+      .catch((err) => fail(err, "playChallenge", ack));
   });
 
   socket.on("joinRoom", ({ code, profile, playerId }, ack) => {
-    const clean = sanitizeProfile(profile);
-    if (!clean) return ack({ ok: false, error: "Escolha um apelido." });
+    resolveProfile(socket, profile)
+      .then((resolved) => {
+        if (!resolved) return ack({ ok: false, error: "Escolha um apelido." });
 
-    saveProfile(clean);
-    const roomCode = String(code ?? "").trim().toUpperCase();
-    const result = rooms.joinRoom(roomCode, clean, socket.id, playerId);
-    if (!result.ok) return ack(result);
+        const roomCode = String(code ?? "").trim().toUpperCase();
+        const result = rooms.joinRoom(roomCode, resolved.profile, socket.id, playerId);
+        if (!result.ok) return ack(result);
 
-    socket.data = { playerId: result.playerId, roomCode };
-    socket.join(roomCode);
-    ack({ ok: true, code: roomCode, playerId: result.playerId });
+        socket.data = { playerId: result.playerId, roomCode };
+        socket.join(roomCode);
+        ack({ ok: true, code: roomCode, playerId: result.playerId });
 
-    const state = rooms.getState(roomCode);
-    if (state) io.to(roomCode).emit("state", state);
+        const state = rooms.getState(roomCode);
+        if (state) io.to(roomCode).emit("state", state);
+      })
+      .catch((err) => fail(err, "joinRoom", ack));
+  });
+
+  socket.on("fetchChallenge", ({ code }, ack) => {
+    if (!hasDatabase()) return ack({ ok: false, error: "Desafios precisam do banco configurado." });
+
+    getChallengeSummary(String(code ?? "").trim())
+      .then((challenge) =>
+        ack(challenge ? { ok: true, challenge } : { ok: false, error: "Desafio não encontrado." }),
+      )
+      .catch((err) => fail(err, "fetchChallenge", ack));
+  });
+
+  socket.on("fetchStats", ({ profileId }, ack) => {
+    if (!hasDatabase()) return ack({ stats: null });
+
+    getStats(String(profileId ?? ""))
+      .then((stats) => ack({ stats }))
+      .catch((err) => {
+        console.error("[fetchStats]", err);
+        ack({ stats: null });
+      });
+  });
+
+  socket.on("fetchLeaderboards", (ack) => {
+    if (!hasDatabase()) return ack({ leaderboards: { solo: [], streaks: [] } });
+
+    getLeaderboards()
+      .then((leaderboards) => ack({ leaderboards }))
+      .catch((err) => {
+        console.error("[fetchLeaderboards]", err);
+        ack({ leaderboards: { solo: [], streaks: [] } });
+      });
   });
 
   socket.on("updateSettings", ({ settings }) => {
@@ -191,7 +285,7 @@ io.on("connection", (socket: GameSocket) => {
 httpServer.listen(port, hostname, () => {
   console.log(`> BlindGuess pronto em http://${hostname}:${port}`);
   if (!process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY) {
-    console.warn("! NEXT_PUBLIC_GOOGLE_MAPS_API_KEY nao definida — copie .env.example para .env");
+    console.warn("! NEXT_PUBLIC_GOOGLE_MAPS_API_KEY não definida — copie .env.example para .env");
   }
 });
 
@@ -231,10 +325,11 @@ function sanitizeProfile(profile: unknown): PlayerProfile | null {
   return { id, name, avatar };
 }
 
-// Garante que nada em memoria se perca num deploy/restart limpo.
+// Fecha as conexões do banco antes de sair, num deploy ou restart.
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.on(signal, () => {
-    flushNow();
-    process.exit(0);
+    const done = () => process.exit(0);
+    if (hasDatabase()) getPool().end().then(done, done);
+    else done();
   });
 }

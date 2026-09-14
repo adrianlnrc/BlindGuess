@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { signOut } from "next-auth/react";
 import { useCallback, useEffect, useState } from "react";
 import Avatar from "@/components/Avatar";
 import AvatarEditor from "@/components/AvatarEditor";
@@ -16,6 +17,7 @@ export default function HomePage() {
   const router = useRouter();
   const [profile, setProfile] = useState<PlayerProfile | null>(null);
   const [stats, setStats] = useState<ProfileStats | null>(null);
+  const [account, setAccount] = useState<{ authenticated: boolean; email: string | null } | null>(null);
   const [editing, setEditing] = useState(false);
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState<Mode | "join" | null>(null);
@@ -23,19 +25,37 @@ export default function HomePage() {
 
   useEffect(() => setProfile(loadProfile()), []);
 
-  // Busca o streak e os totais assim que o perfil estiver carregado.
+  /**
+   * Diz ao servidor quem somos e recebe a identidade canônica de volta: logado,
+   * o id vem da conta (e adota o perfil de convidado no primeiro login).
+   */
   useEffect(() => {
-    if (!profile?.id) return;
+    if (!profile) return;
 
     const socket = getSocket();
-    const fetchStats = () =>
-      socket.emit("fetchStats", { profileId: profile.id }, (res) => setStats(res.stats));
 
-    fetchStats();
-    socket.on("connect", fetchStats);
-    return () => {
-      socket.off("connect", fetchStats);
+    const identify = () => {
+      socket.emit("identify", { profile }, (res) => {
+        if (!res.ok) return;
+
+        setAccount({ authenticated: res.authenticated, email: res.email });
+
+        // O servidor pode devolver outro id (conta) ou o nome vindo do Google.
+        if (res.profile.id !== profile.id || res.profile.name !== profile.name) {
+          setProfile(res.profile);
+          saveProfileLocal(res.profile);
+        }
+
+        socket.emit("fetchStats", { profileId: res.profile.id }, (r) => setStats(r.stats));
+      });
     };
+
+    identify();
+    socket.on("connect", identify);
+    return () => {
+      socket.off("connect", identify);
+    };
+    // Reidentifica quando a identidade muda, não a cada tecla no apelido.
   }, [profile?.id]);
 
   const update = useCallback((patch: Partial<PlayerProfile>) => {
@@ -134,7 +154,31 @@ export default function HomePage() {
           </p>
         </div>
 
-        <StreakBadge streak={stats?.streak ?? null} />
+        <div className="flex flex-col items-end gap-3">
+          <StreakBadge streak={stats?.streak ?? null} />
+
+          {account?.authenticated ? (
+            <div className="flex items-center gap-3 text-sm">
+              <span className="text-mist-300">
+                {account.email ? account.email : "conta conectada"}
+              </span>
+              <button
+                type="button"
+                onClick={() => signOut({ callbackUrl: "/" })}
+                className="rounded-lg border border-ink-600 px-3 py-1.5 font-medium transition hover:border-beam-500 hover:text-beam-400"
+              >
+                Sair
+              </button>
+            </div>
+          ) : (
+            <Link
+              href="/entrar"
+              className="rounded-lg border border-ink-600 px-3 py-1.5 text-sm font-medium transition hover:border-beam-500 hover:text-beam-400"
+            >
+              Entrar e salvar meu progresso
+            </Link>
+          )}
+        </div>
       </header>
 
       {/* Perfil */}
