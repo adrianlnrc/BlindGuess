@@ -3,17 +3,9 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import Avatar from "@/components/Avatar";
+import { mapLabel } from "@/lib/catalog";
 import { getSocket } from "@/lib/socket";
-import type { Leaderboards, RegionId } from "@/lib/types";
-
-const REGION_LABELS: Record<RegionId, string> = {
-  world: "Mundo",
-  brazil: "Brasil",
-  europe: "Europa",
-  americas: "Américas",
-  asia: "Ásia",
-  famous: "Famosos",
-};
+import type { Leaderboards } from "@/lib/types";
 
 const MEDALS = ["🥇", "🥈", "🥉"];
 
@@ -71,7 +63,7 @@ export default function RankingPage() {
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-medium">{entry.name}</p>
                       <p className="text-xs text-mist-300">
-                        {entry.rounds} rodadas · {REGION_LABELS[entry.region] ?? entry.region}
+                        {entry.rounds} rodadas · {mapLabel(entry.region)}
                       </p>
                     </div>
                     <span className="font-bold tabular-nums text-beam-400">

@@ -13,6 +13,7 @@ letras e todo mundo joga as mesmas rodadas ao mesmo tempo, com placar ao vivo.
 | --- | --- |
 | **Solo** | Partida sozinho. A pontuação entra no ranking e conta para o streak. |
 | **Sala com amigos** | Todos jogam as mesmas rodadas ao mesmo tempo, com placar ao vivo. |
+| **Duelo 1v1** | Vida contra vida. Cada um começa com 6.000; a cada rodada, quem chuta mais longe perde a diferença de pontos em vida. Acaba quando alguém zera. |
 | **Desafio por link** | Os locais são sorteados na criação e ficam fixos. Você joga, manda o link, e cada amigo encara exatamente os mesmos lugares quando quiser. Vale a melhor marca de cada um. |
 
 Toda partida livre (solo ou em grupo) também vira um desafio compartilhável no fim —
@@ -27,11 +28,52 @@ pessoas abrirem ao mesmo tempo, o banco decide qual conjunto vale e as duas joga
 
 O fuso que define a virada é o `BLINDGUESS_TIMEZONE`.
 
+### Duelo
+
+Não há contagem de rodadas: o duelo dura enquanto os dois tiverem vida.
+
+- **6.000 de vida** para cada duelista.
+- **Dano** = diferença entre as pontuações da rodada × multiplicador. Empate não tira vida.
+- **Multiplicador** cresce com o tempo — 1× nas duas primeiras rodadas, 1,5× até a quarta,
+  2× até a sexta, 3× depois — para o duelo não se arrastar.
+- **Não palpitar conta como zero**, então sumir da rodada custa caro.
+- No teto de 25 rodadas, vence quem tiver mais vida.
+
+## Mapas
+
+Nove mapas em três faixas de dificuldade. A dificuldade não é só um rótulo: ela muda o
+quanto o sorteio pode se afastar do ponto-semente e o raio de busca do panorama —
+10 km no fácil, 60 km no difícil. Na prática, mapa difícil joga você numa estrada rural,
+longe de placas e pontos de referência.
+
+| Faixa | Mapas |
+| --- | --- |
+| Fácil | Pontos famosos, Brasil |
+| Médio | Europa, Américas, Ásia, Mundo todo |
+| Difícil | África, Oceania, Mundo rural |
+
+## Moedas e loja
+
+Cada partida paga uma moeda por mil pontos, com bônus de 25 no desafio do dia e 40 na
+vitória em duelo. As moedas compram cosméticos para o personagem — chapéus, rostos e
+cores extras.
+
+O preço vem do catálogo do servidor, nunca do cliente, e o débito e a entrega acontecem
+na mesma transação. Item não comprado que chegue no perfil é revertido para o padrão pelo
+servidor — o que o navegador manda sobre aparência é sugestão, não verdade.
+
+## Amigos
+
+Cada jogador tem um código de seis caracteres. Quem recebe o código adiciona, e a amizade
+vale nos dois sentidos na hora — quem passou o código já consentiu, então não há convite
+pendente. A lista mostra nível, ofensiva e quem está com o jogo aberto agora.
+
 ## Progressão
 
 - **Streak diário**: jogar pelo menos uma partida por dia mantém a ofensiva viva. Jogar
   várias vezes no mesmo dia não infla o contador; ficar um dia fora zera, mas o recorde
   histórico fica guardado. O "dia" usa o fuso de `BLINDGUESS_TIMEZONE`.
+- **Cartel de duelos**: vitórias e derrotas por jogador.
 - **Nível**: os pontos acumulados viram XP numa curva quadrática — nível 2 em 2.500 pontos,
   3 em 10.000, 21 em 1 milhão. Sobe rápido no começo e vira maratona depois.
 - **Ranking** (`/ranking`): melhores partidas solo e as ofensivas mais longas.
@@ -158,6 +200,9 @@ src/lib/types.ts          contratos compartilhados entre cliente e servidor
 src/lib/useRoom.ts        hook que sincroniza o estado da sala no cliente
 src/lib/profile.ts        perfil e avatar no localStorage
 src/lib/level.ts          curva de XP e nível
+src/lib/duel.ts           regras de dano do duelo
+src/lib/catalog.ts        catálogo de mapas e dificuldades
+src/lib/shop.ts           catálogo da loja e regra de moedas
 src/components/           Street View, mapa de palpite, lobby, avatar, resultados
 ```
 

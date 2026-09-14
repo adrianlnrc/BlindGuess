@@ -142,5 +142,25 @@ export async function migrate(): Promise<void> {
     -- Cartel de duelos.
     ALTER TABLE players ADD COLUMN IF NOT EXISTS duel_wins INTEGER NOT NULL DEFAULT 0;
     ALTER TABLE players ADD COLUMN IF NOT EXISTS duel_losses INTEGER NOT NULL DEFAULT 0;
+
+    -- Moedas e itens comprados na loja.
+    ALTER TABLE players ADD COLUMN IF NOT EXISTS coins INTEGER NOT NULL DEFAULT 0;
+
+    -- Codigo curto para adicionar amigos.
+    ALTER TABLE players ADD COLUMN IF NOT EXISTS friend_code TEXT UNIQUE;
+
+    CREATE TABLE IF NOT EXISTS friendships (
+      player_id TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      friend_id TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (player_id, friend_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS player_items (
+      player_id TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      item_id TEXT NOT NULL,
+      acquired_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (player_id, item_id)
+    );
   `);
 }

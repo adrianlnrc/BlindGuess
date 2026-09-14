@@ -1,12 +1,15 @@
 import type {
   Avatar,
   ChallengeSummary,
+  Friend,
   Leaderboards,
   PlayerProfile,
   ProfileStats,
   RegionId,
   RoomSettings,
 } from "@/lib/types";
+import { levelForXp } from "@/lib/level";
+import { coinsEarned, itemById } from "@/lib/shop";
 import { getPool } from "./db";
 import type { PickedLocation } from "./locations";
 
@@ -296,13 +299,17 @@ export async function recordGame(input: {
       );
     }
 
+    let isDaily = false;
+
     if (input.challengeCode) {
       const kind = await db.query<{ single_attempt: boolean }>(
         `SELECT single_attempt FROM challenges WHERE code = $1`,
         [input.challengeCode],
       );
 
-      if (kind.rows[0]?.single_attempt) {
+      isDaily = !!kind.rows[0]?.single_attempt;
+
+      if (isDaily) {
         // Desafio do dia: vale a primeira tentativa, e só ela.
         await db.query(
           `INSERT INTO challenge_entries (challenge_code, player_id, total_score)
@@ -321,6 +328,20 @@ export async function recordGame(input: {
           [input.challengeCode, input.profile.id, input.totalScore],
         );
       }
+    }
+
+    const coins = coinsEarned({
+      totalScore: input.totalScore,
+      mode: input.mode,
+      isDaily,
+      duelOutcome: input.duelOutcome,
+    });
+
+    if (coins > 0) {
+      await db.query(`UPDATE players SET coins = coins + $2 WHERE id = $1`, [
+        input.profile.id,
+        coins,
+      ]);
     }
 
     await db.query("COMMIT");
@@ -385,6 +406,197 @@ export async function getLeaderboards(): Promise<Leaderboards> {
       longest: r.streak_longest,
     })),
   };
+}
+
+// ----------------------------------------------------------------- amigos
+
+const FRIEND_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+/** Codigo curto do jogador, gerado na primeira vez que alguem pede. */
+export async function getFriendCode(playerId: string): Promise<string> {
+  const db = getPool();
+
+  const existing = await db.query<{ friend_code: string | null }>(
+    `SELECT friend_code FROM players WHERE id = $1`,
+    [playerId],
+  );
+
+  if (!existing.rows[0]) throw new Error("Jogador não encontrado.");
+  if (existing.rows[0].friend_code) return existing.rows[0].friend_code;
+
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const code = Array.from(
+      { length: 6 },
+      () => FRIEND_ALPHABET[Math.floor(Math.random() * FRIEND_ALPHABET.length)],
+    ).join("");
+
+    const { rows } = await db.query<{ friend_code: string }>(
+      `UPDATE players SET friend_code = $2
+        WHERE id = $1 AND friend_code IS NULL
+          AND NOT EXISTS (SELECT 1 FROM players WHERE friend_code = $2)
+        RETURNING friend_code`,
+      [playerId, code],
+    );
+
+    if (rows[0]) return rows[0].friend_code;
+  }
+
+  throw new Error("Não consegui gerar um código de amigo.");
+}
+
+/** Lista de amigos, com nivel e ofensiva de cada um. */
+export async function getFriends(
+  playerId: string,
+  isOnline: (id: string) => boolean,
+): Promise<Friend[]> {
+  const { rows } = await getPool().query<{
+    id: string;
+    name: string;
+    avatar: Avatar;
+    total_score: string;
+    streak_current: number;
+  }>(
+    `SELECT p.id, p.name, p.avatar, p.total_score, p.streak_current
+       FROM friendships f
+       JOIN players p ON p.id = f.friend_id
+      WHERE f.player_id = $1
+      ORDER BY p.name`,
+    [playerId],
+  );
+
+  return rows.map((row) => ({
+    profileId: row.id,
+    name: row.name,
+    avatar: row.avatar,
+    online: isOnline(row.id),
+    level: levelForXp(Number(row.total_score)),
+    streak: row.streak_current,
+  }));
+}
+
+/**
+ * Adiciona pelo codigo. A amizade vale nos dois sentidos: quem passou o codigo
+ * ja consentiu, entao nao ha convite pendente para aceitar.
+ */
+export async function addFriendByCode(
+  playerId: string,
+  code: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const db = getPool();
+
+  const { rows } = await db.query<{ id: string }>(
+    `SELECT id FROM players WHERE friend_code = $1`,
+    [code.trim().toUpperCase()],
+  );
+
+  const friendId = rows[0]?.id;
+  if (!friendId) return { ok: false, error: "Código não encontrado." };
+  if (friendId === playerId) return { ok: false, error: "Esse código é o seu." };
+
+  await db.query(
+    `INSERT INTO friendships (player_id, friend_id) VALUES ($1, $2), ($2, $1)
+     ON CONFLICT DO NOTHING`,
+    [playerId, friendId],
+  );
+
+  return { ok: true };
+}
+
+export async function removeFriend(playerId: string, friendId: string): Promise<void> {
+  await getPool().query(
+    `DELETE FROM friendships
+      WHERE (player_id = $1 AND friend_id = $2) OR (player_id = $2 AND friend_id = $1)`,
+    [playerId, friendId],
+  );
+}
+
+// --------------------------------------------------------------- carteira
+
+export type Wallet = { coins: number; items: string[] };
+
+export async function getWallet(playerId: string): Promise<Wallet> {
+  const db = getPool();
+
+  const player = await db.query<{ coins: number }>(
+    `SELECT coins FROM players WHERE id = $1`,
+    [playerId],
+  );
+
+  const items = await db.query<{ item_id: string }>(
+    `SELECT item_id FROM player_items WHERE player_id = $1`,
+    [playerId],
+  );
+
+  return {
+    coins: player.rows[0]?.coins ?? 0,
+    items: items.rows.map((row) => row.item_id),
+  };
+}
+
+/** Itens que o jogador pode equipar. Usado para nao aceitar item nao comprado. */
+export async function getOwnedItems(playerId: string): Promise<Set<string>> {
+  const { rows } = await getPool().query<{ item_id: string }>(
+    `SELECT item_id FROM player_items WHERE player_id = $1`,
+    [playerId],
+  );
+  return new Set(rows.map((row) => row.item_id));
+}
+
+/**
+ * Compra um item. O preco vem do catalogo do servidor, nunca do cliente, e o
+ * debito e a entrega acontecem na mesma transacao.
+ */
+export async function buyItem(
+  playerId: string,
+  itemId: string,
+): Promise<{ ok: true; wallet: Wallet } | { ok: false; error: string }> {
+  const item = itemById(itemId);
+  if (!item) return { ok: false, error: "Item não existe." };
+
+  const db = await getPool().connect();
+
+  try {
+    await db.query("BEGIN");
+
+    const player = await db.query<{ coins: number }>(
+      `SELECT coins FROM players WHERE id = $1 FOR UPDATE`,
+      [playerId],
+    );
+
+    if (!player.rows[0]) {
+      await db.query("ROLLBACK");
+      return { ok: false, error: "Jogador não encontrado." };
+    }
+
+    const owned = await db.query(
+      `SELECT 1 FROM player_items WHERE player_id = $1 AND item_id = $2`,
+      [playerId, itemId],
+    );
+
+    if (owned.rowCount) {
+      await db.query("ROLLBACK");
+      return { ok: false, error: "Você já tem esse item." };
+    }
+
+    if (player.rows[0].coins < item.price) {
+      await db.query("ROLLBACK");
+      return { ok: false, error: "Moedas insuficientes." };
+    }
+
+    await db.query(`UPDATE players SET coins = coins - $2 WHERE id = $1`, [playerId, item.price]);
+    await db.query(
+      `INSERT INTO player_items (player_id, item_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+      [playerId, itemId],
+    );
+
+    await db.query("COMMIT");
+    return { ok: true, wallet: await getWallet(playerId) };
+  } catch (err) {
+    await db.query("ROLLBACK").catch(() => {});
+    throw err;
+  } finally {
+    db.release();
+  }
 }
 
 // --------------------------------------------------------------- desafios

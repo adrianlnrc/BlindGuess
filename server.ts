@@ -11,13 +11,21 @@ import {
 import { getPool, hasDatabase, migrate } from "./src/server/db.ts";
 import { RoomManager } from "./src/server/rooms.ts";
 import { userFromCookieHeader } from "./src/server/session.ts";
+import { paidItemFor } from "./src/lib/shop.ts";
 import {
+  addFriendByCode,
+  buyItem,
   claimGuest,
   getChallengeSummary,
+  getFriendCode,
+  getFriends,
   getLeaderboards,
+  getOwnedItems,
   getPlayerForUser,
   getStats,
+  getWallet,
   nextDailyResetAt,
+  removeFriend,
   saveProfile,
 } from "./src/server/store.ts";
 
@@ -25,7 +33,7 @@ const dev = process.env.NODE_ENV !== "production";
 const hostname = process.env.HOSTNAME ?? "0.0.0.0";
 const port = Number(process.env.PORT ?? 3000);
 
-type SocketData = { playerId?: string; roomCode?: string };
+type SocketData = { playerId?: string; roomCode?: string; profileId?: string };
 type GameSocket = Socket<ClientToServerEvents, ServerToClientEvents, never, SocketData>;
 
 const app = next({ dev, hostname, port });
@@ -94,7 +102,11 @@ async function resolveProfile(
   if (!clean) return null;
 
   if (!user) {
-    if (hasDatabase()) await saveProfile(clean).catch((err) => console.error("[profile]", err));
+    if (hasDatabase()) {
+      clean = await enforceOwnership(clean);
+      await saveProfile(clean).catch((err) => console.error("[profile]", err));
+    }
+    trackPresence(socket, clean.id);
     return { profile: clean, authenticated: false, email: null };
   }
 
@@ -103,10 +115,48 @@ async function resolveProfile(
     (await getPlayerForUser(user.id)) ??
     (await claimGuest(user.id, clean.id, { name: clean.name, avatar: clean.avatar }));
 
-  const profile: PlayerProfile = { id: owned.id, name: clean.name, avatar: clean.avatar };
+  const profile = await enforceOwnership({ id: owned.id, name: clean.name, avatar: clean.avatar });
   await saveProfile(profile);
+  trackPresence(socket, profile.id);
 
   return { profile, authenticated: true, email: user.email };
+}
+
+/** Amarra a presença do perfil a esta conexão, trocando se a identidade mudar. */
+function trackPresence(socket: GameSocket, profileId: string): void {
+  if (socket.data.profileId === profileId) return;
+  if (socket.data.profileId) markOffline(socket.data.profileId);
+
+  socket.data = { ...socket.data, profileId };
+  markOnline(profileId);
+}
+
+/**
+ * Item pago so vale se o jogador comprou. O cliente pode mandar qualquer
+ * aparencia; aqui o que ele nao possui volta para o padrao.
+ */
+async function enforceOwnership(profile: PlayerProfile): Promise<PlayerProfile> {
+  const paid = [
+    paidItemFor("hat", profile.avatar.hat),
+    paidItemFor("face", profile.avatar.face),
+    paidItemFor("outfit", profile.avatar.outfit),
+    paidItemFor("accent", profile.avatar.accent),
+  ].filter((item) => item !== undefined);
+
+  if (paid.length === 0) return profile;
+
+  const owned = await getOwnedItems(profile.id);
+  const avatar = { ...profile.avatar };
+
+  for (const item of paid) {
+    if (owned.has(item.id)) continue;
+    if (item.kind === "hat") avatar.hat = DEFAULT_AVATAR.hat;
+    else if (item.kind === "face") avatar.face = DEFAULT_AVATAR.face;
+    else if (item.kind === "outfit") avatar.outfit = DEFAULT_AVATAR.outfit;
+    else avatar.accent = DEFAULT_AVATAR.accent;
+  }
+
+  return { ...profile, avatar };
 }
 
 /** O id canônico de quem está falando, sem exigir um perfil completo. */
@@ -126,6 +176,27 @@ async function resolvePlayerId(socket: GameSocket, fallback: unknown): Promise<s
  * O contador do engine ainda não decrementou no instante do disconnect, então
  * um reconciliador periódico garante que a queda apareça mesmo assim.
  */
+/**
+ * Quem está com o jogo aberto agora, por perfil. Uma pessoa pode ter várias
+ * abas, então guardamos a contagem e o perfil só sai da lista quando a última
+ * fecha.
+ */
+const onlineProfiles = new Map<string, number>();
+
+function markOnline(profileId: string): void {
+  onlineProfiles.set(profileId, (onlineProfiles.get(profileId) ?? 0) + 1);
+}
+
+function markOffline(profileId: string): void {
+  const count = (onlineProfiles.get(profileId) ?? 0) - 1;
+  if (count > 0) onlineProfiles.set(profileId, count);
+  else onlineProfiles.delete(profileId);
+}
+
+function isOnline(profileId: string): boolean {
+  return onlineProfiles.has(profileId);
+}
+
 let lastAnnounced = -1;
 
 function announcePresence(): void {
@@ -273,6 +344,65 @@ io.on("connection", (socket: GameSocket) => {
       });
   });
 
+  socket.on("fetchFriends", ({ profileId }, ack) => {
+    if (!hasDatabase()) return ack({ ok: false, error: "Amigos precisam do banco configurado." });
+
+    resolvePlayerId(socket, profileId)
+      .then(async (playerId) => {
+        const myCode = await getFriendCode(playerId);
+        const friends = await getFriends(playerId, isOnline);
+        ack({ ok: true, myCode, friends });
+      })
+      .catch((err) => fail(err, "fetchFriends", ack));
+  });
+
+  socket.on("addFriend", ({ profileId, code }, ack) => {
+    if (!hasDatabase()) return ack({ ok: false, error: "Amigos precisam do banco configurado." });
+
+    resolvePlayerId(socket, profileId)
+      .then(async (playerId) => {
+        const result = await addFriendByCode(playerId, String(code ?? ""));
+        if (!result.ok) return ack(result);
+        ack({ ok: true, friends: await getFriends(playerId, isOnline) });
+      })
+      .catch((err) => fail(err, "addFriend", ack));
+  });
+
+  socket.on("removeFriend", ({ profileId, friendId }, ack) => {
+    if (!hasDatabase()) return ack({ ok: false, error: "Amigos precisam do banco configurado." });
+
+    resolvePlayerId(socket, profileId)
+      .then(async (playerId) => {
+        await removeFriend(playerId, String(friendId ?? ""));
+        ack({ ok: true, friends: await getFriends(playerId, isOnline) });
+      })
+      .catch((err) => fail(err, "removeFriend", ack));
+  });
+
+  socket.on("fetchWallet", ({ profileId }, ack) => {
+    if (!hasDatabase()) return ack({ coins: 0, items: [] });
+
+    resolvePlayerId(socket, profileId)
+      .then((playerId) => getWallet(playerId))
+      .then((wallet) => ack(wallet))
+      .catch((err) => {
+        console.error("[fetchWallet]", err);
+        ack({ coins: 0, items: [] });
+      });
+  });
+
+  socket.on("buyItem", ({ profileId, itemId }, ack) => {
+    if (!hasDatabase()) return ack({ ok: false, error: "A loja precisa do banco configurado." });
+
+    resolvePlayerId(socket, profileId)
+      .then((playerId) => buyItem(playerId, String(itemId ?? "")))
+      .then((res) => {
+        if (!res.ok) return ack(res);
+        ack({ ok: true, coins: res.wallet.coins, items: res.wallet.items });
+      })
+      .catch((err) => fail(err, "buyItem", ack));
+  });
+
   socket.on("fetchDaily", ({ profileId }, ack) => {
     if (!hasDatabase()) {
       return ack({ ok: false, error: "O desafio do dia precisa do banco configurado." });
@@ -381,8 +511,9 @@ io.on("connection", (socket: GameSocket) => {
   });
 
   socket.on("disconnect", () => {
-    const { roomCode, playerId } = socket.data;
+    const { roomCode, playerId, profileId } = socket.data;
     if (roomCode && playerId) rooms.handleDisconnect(roomCode, playerId);
+    if (profileId) markOffline(profileId);
   });
 });
 
@@ -400,8 +531,13 @@ function sanitizeName(name: unknown): string {
     .slice(0, 18);
 }
 
-const HATS = new Set(["none", "cap", "explorer", "beanie", "headphones"]);
-const FACES = new Set(["smile", "focused", "glasses", "shades"]);
+const HATS = new Set([
+  "none", "cap", "explorer", "beanie", "headphones",
+  "bucket", "visor", "helmet", "crown",
+]);
+const FACES = new Set([
+  "smile", "focused", "glasses", "shades", "wink", "grin", "eyepatch",
+]);
 
 /** So aceita cores em hex e opcoes conhecidas — nada vindo do cliente entra cru na UI. */
 function sanitizeColor(value: unknown, fallback: string): string {

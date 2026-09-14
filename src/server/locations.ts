@@ -1,3 +1,4 @@
+import { mapById, type Difficulty } from "@/lib/catalog";
 import type { LatLng, RegionId } from "@/lib/types";
 
 export type PickedLocation = LatLng & { panoId: string };
@@ -64,6 +65,46 @@ const SEEDS: Record<Exclude<RegionId, "world">, LatLng[]> = {
     { lat: 34.6937, lng: 135.5023 }, { lat: 10.8231, lng: 106.6297 },
     { lat: 21.0278, lng: 105.8342 }, { lat: 33.6844, lng: 73.0479 },
   ],
+  africa: [
+    { lat: -33.9249, lng: 18.4241 }, { lat: -26.2041, lng: 28.0473 },
+    { lat: -29.8587, lng: 31.0218 }, { lat: -1.2921, lng: 36.8219 },
+    { lat: -6.7924, lng: 39.2083 }, { lat: 0.3476, lng: 32.5825 },
+    { lat: 5.6037, lng: -0.187 }, { lat: 6.5244, lng: 3.3792 },
+    { lat: 14.7167, lng: -17.4677 }, { lat: 33.5731, lng: -7.5898 },
+    { lat: 36.8065, lng: 10.1815 }, { lat: 30.0444, lng: 31.2357 },
+    { lat: -22.5609, lng: 17.0658 }, { lat: -24.6282, lng: 25.9231 },
+    { lat: -20.1609, lng: 57.5012 }, { lat: -18.8792, lng: 47.5079 },
+    { lat: 9.0192, lng: 38.7525 }, { lat: -4.4419, lng: 15.2663 },
+    { lat: 12.6392, lng: -8.0029 }, { lat: 31.6295, lng: -7.9811 },
+    { lat: -15.3875, lng: 28.3228 }, { lat: -17.8252, lng: 31.0335 },
+  ],
+  oceania: [
+    { lat: -33.8688, lng: 151.2093 }, { lat: -37.8136, lng: 144.9631 },
+    { lat: -27.4698, lng: 153.0251 }, { lat: -31.9505, lng: 115.8605 },
+    { lat: -34.9285, lng: 138.6007 }, { lat: -42.8821, lng: 147.3272 },
+    { lat: -12.4634, lng: 130.8456 }, { lat: -23.6980, lng: 133.8807 },
+    { lat: -36.8485, lng: 174.7633 }, { lat: -41.2865, lng: 174.7762 },
+    { lat: -43.5321, lng: 172.6362 }, { lat: -45.8788, lng: 170.5028 },
+    { lat: -17.7134, lng: 178.0650 }, { lat: -9.4438, lng: 147.1803 },
+    { lat: -21.1789, lng: -175.1982 }, { lat: -13.8333, lng: -171.7667 },
+    { lat: -22.2758, lng: 166.4580 }, { lat: -19.0554, lng: 178.4417 },
+    { lat: -35.2809, lng: 149.1300 }, { lat: -28.0167, lng: 153.4000 },
+  ],
+  world_rural: [
+    { lat: -13.5, lng: -56.1 }, { lat: -9.9, lng: -63.3 },
+    { lat: 46.8, lng: -100.8 }, { lat: 41.6, lng: -109.2 },
+    { lat: 52.1, lng: -106.6 }, { lat: 62.0, lng: 15.5 },
+    { lat: 65.0, lng: 25.5 }, { lat: 55.8, lng: 49.1 },
+    { lat: 50.4, lng: 30.5 }, { lat: 45.9, lng: 24.9 },
+    { lat: 39.5, lng: -5.9 }, { lat: 43.3, lng: 17.8 },
+    { lat: -31.4, lng: -64.2 }, { lat: -38.0, lng: -63.6 },
+    { lat: -22.9, lng: -50.5 }, { lat: -6.3, lng: 106.0 },
+    { lat: 14.1, lng: 100.9 }, { lat: 27.5, lng: 78.5 },
+    { lat: 36.5, lng: 138.2 }, { lat: -29.1, lng: 26.2 },
+    { lat: -25.7, lng: 28.2 }, { lat: -31.0, lng: 145.0 },
+    { lat: -41.0, lng: 173.0 }, { lat: 60.5, lng: -135.0 },
+    { lat: 49.0, lng: 2.9 }, { lat: 53.5, lng: -2.5 },
+  ],
   famous: [
     { lat: 48.8584, lng: 2.2945 }, { lat: 40.4319, lng: 116.5704 },
     { lat: 27.1751, lng: 78.0421 }, { lat: -13.1631, lng: -72.545 },
@@ -86,10 +127,16 @@ function seedsFor(region: RegionId): LatLng[] {
   return region === "world" ? WORLD_SEEDS : SEEDS[region];
 }
 
-/** Desvio aleatorio em graus ao redor da semente (~ +/- 55 km). */
-const JITTER_DEG = 0.5;
-/** Raio de busca do panorama a partir do ponto sorteado. */
-const SEARCH_RADIUS_M = 20_000;
+/**
+ * A dificuldade muda o quao longe da semente o sorteio pode cair e o raio de
+ * busca do panorama. Mapa facil cai perto de cidade; dificil joga voce numa
+ * estrada rural, onde nao ha placa nem ponto de referencia.
+ */
+const SEARCH: Record<Difficulty, { jitterDeg: number; radiusM: number }> = {
+  facil: { jitterDeg: 0.15, radiusM: 10_000 },
+  medio: { jitterDeg: 0.5, radiusM: 20_000 },
+  dificil: { jitterDeg: 1.6, radiusM: 60_000 },
+};
 
 type MetadataResponse = {
   status: string;
@@ -97,10 +144,23 @@ type MetadataResponse = {
   location?: { lat: number; lng: number };
 };
 
-async function lookupPanorama(point: LatLng, apiKey: string): Promise<PickedLocation | null> {
+/** O jitter pode empurrar a semente para fora dos limites do globo. */
+function clampLat(lat: number): number {
+  return Math.max(-85, Math.min(85, lat));
+}
+
+function wrapLng(lng: number): number {
+  return ((((lng + 180) % 360) + 360) % 360) - 180;
+}
+
+async function lookupPanorama(
+  point: LatLng,
+  apiKey: string,
+  radiusM: number,
+): Promise<PickedLocation | null> {
   const url = new URL("https://maps.googleapis.com/maps/api/streetview/metadata");
   url.searchParams.set("location", `${point.lat},${point.lng}`);
-  url.searchParams.set("radius", String(SEARCH_RADIUS_M));
+  url.searchParams.set("radius", String(radiusM));
   url.searchParams.set("source", "outdoor");
   url.searchParams.set("key", apiKey);
 
@@ -126,16 +186,17 @@ export async function pickLocation(
   if (!apiKey) return null;
 
   const seeds = seedsFor(region);
+  const search = SEARCH[mapById(region)?.difficulty ?? "medio"];
 
   for (let i = 0; i < attempts; i++) {
     const seed = seeds[Math.floor(Math.random() * seeds.length)];
     const point: LatLng = {
-      lat: seed.lat + (Math.random() * 2 - 1) * JITTER_DEG,
-      lng: seed.lng + (Math.random() * 2 - 1) * JITTER_DEG,
+      lat: clampLat(seed.lat + (Math.random() * 2 - 1) * search.jitterDeg),
+      lng: wrapLng(seed.lng + (Math.random() * 2 - 1) * search.jitterDeg),
     };
 
     try {
-      const found = await lookupPanorama(point, apiKey);
+      const found = await lookupPanorama(point, apiKey, search.radiusM);
       if (found && !exclude.has(found.panoId)) return found;
     } catch {
       // timeout ou rede: tenta a proxima semente

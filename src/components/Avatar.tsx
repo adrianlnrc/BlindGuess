@@ -36,6 +36,27 @@ export default function Avatar({ avatar, size = 48, className = "" }: Props) {
 }
 
 function Face({ face, accent }: { face: AvatarType["face"]; accent: string }) {
+  if (face === "wink") {
+    return (
+      <>
+        <path d="M23 27.5c1.6 -1.8 4.4 -1.8 6 0" stroke="#141d2e" strokeWidth="1.8" fill="none" strokeLinecap="round" />
+        <circle cx="38" cy="27" r="2.2" fill="#141d2e" />
+        <path d="M26 33.5c2.2 3 9.8 3 12 0" stroke="#141d2e" strokeWidth="1.8" strokeLinecap="round" fill="none" />
+      </>
+    );
+  }
+
+  if (face === "grin") {
+    return (
+      <>
+        <circle cx="26" cy="27" r="2.2" fill="#141d2e" />
+        <circle cx="38" cy="27" r="2.2" fill="#141d2e" />
+        <path d="M25 33c1 4 12 4 14 0z" fill="#141d2e" />
+        <path d="M26.6 34.4h10.8" stroke="#ffffff" strokeWidth="1.5" strokeLinecap="round" />
+      </>
+    );
+  }
+
   const eyes =
     face === "focused" ? (
       <>
@@ -56,6 +77,13 @@ function Face({ face, accent }: { face: AvatarType["face"]; accent: string }) {
           <circle cx="26" cy="27" r="5" />
           <circle cx="38" cy="27" r="5" />
           <path d="M31 27h2" />
+        </g>
+      )}
+
+      {face === "eyepatch" && (
+        <g>
+          <path d="M20 24.5h11v6.5H20z" fill="#141d2e" />
+          <path d="M19 23.5c4 -2 9 -2 13 0" stroke="#141d2e" strokeWidth="1.4" fill="none" />
         </g>
       )}
 
@@ -115,6 +143,36 @@ function Hat({
           <path d="M17 21a15 15 0 0 1 30 0z" fill={accent} />
           <rect x="16" y="20" width="32" height="4.5" rx="2.2" fill={accent} opacity="0.75" />
           <circle cx="32" cy="8" r="3" fill={accent} />
+        </g>
+      );
+    case "bucket":
+      return (
+        <g>
+          <path d="M19 21a13 13 0 0 1 26 0z" fill={accent} />
+          <path d="M14 21h36a4 4 0 0 1-4 5H18a4 4 0 0 1-4-5z" fill={accent} opacity="0.85" />
+        </g>
+      );
+    case "visor":
+      return (
+        <g>
+          <rect x="17" y="17.5" width="30" height="5" rx="2.5" fill={accent} />
+          <path d="M45 18h10a3.5 3.5 0 0 1 0 6H45z" fill={accent} opacity="0.75" />
+        </g>
+      );
+    case "helmet":
+      return (
+        <g>
+          <path d="M16 27a16 16 0 0 1 32 0v1H16z" fill={accent} />
+          <rect x="29.5" y="12" width="5" height="16" fill={outfit} opacity="0.9" />
+          <rect x="14" y="26" width="36" height="3" rx="1.5" fill={accent} opacity="0.7" />
+        </g>
+      );
+    case "crown":
+      return (
+        <g>
+          <path d="M19 20l2-9 5.5 5.5L32 8l5.5 8.5L43 11l2 9z" fill={accent} />
+          <rect x="19" y="19.5" width="26" height="3.5" rx="1.2" fill={accent} />
+          <circle cx="32" cy="14.5" r="1.6" fill={outfit} />
         </g>
       );
     case "headphones":

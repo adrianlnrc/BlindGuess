@@ -4,18 +4,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { use, useEffect, useState } from "react";
 import Avatar from "@/components/Avatar";
+import { mapLabel } from "@/lib/catalog";
 import { loadProfile } from "@/lib/profile";
 import { getSocket, rememberPlayer } from "@/lib/socket";
-import type { ChallengeSummary, PlayerProfile, RegionId } from "@/lib/types";
-
-const REGION_LABELS: Record<RegionId, string> = {
-  world: "Mundo todo",
-  brazil: "Brasil",
-  europe: "Europa",
-  americas: "Américas",
-  asia: "Ásia",
-  famous: "Pontos famosos",
-};
+import type { ChallengeSummary, PlayerProfile } from "@/lib/types";
 
 const MEDALS = ["🥇", "🥈", "🥉"];
 
@@ -95,7 +87,7 @@ export default function ChallengePage({ params }: { params: Promise<{ code: stri
           <p className="text-xs tracking-widest text-mist-300 uppercase">Desafio de</p>
           <h1 className="text-3xl font-black">{challenge.creatorName}</h1>
           <p className="text-mist-300">
-            {challenge.rounds} rodadas · {REGION_LABELS[challenge.settings.region]} ·{" "}
+            {challenge.rounds} rodadas · {mapLabel(challenge.settings.region)} ·{" "}
             {challenge.settings.roundSeconds === 0
               ? "sem limite"
               : `${challenge.settings.roundSeconds}s por rodada`}

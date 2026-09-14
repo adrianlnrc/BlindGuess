@@ -28,6 +28,7 @@ export default function HomePage() {
   const [daily, setDaily] = useState<DailyInfo | null>(null);
   const [dailyError, setDailyError] = useState<string | null>(null);
   const [online, setOnline] = useState<number | null>(null);
+  const [wallet, setWallet] = useState<{ coins: number; items: string[] }>({ coins: 0, items: [] });
   const [editing, setEditing] = useState(false);
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState<Mode | "join" | null>(null);
@@ -57,6 +58,8 @@ export default function HomePage() {
         }
 
         socket.emit("fetchStats", { profileId: res.profile.id }, (r) => setStats(r.stats));
+
+        socket.emit("fetchWallet", { profileId: res.profile.id }, (w) => setWallet(w));
 
         socket.emit("fetchDaily", { profileId: res.profile.id }, (r) => {
           if (r.ok) setDaily(r.daily);
@@ -190,6 +193,14 @@ export default function HomePage() {
         <div className="flex flex-col items-end gap-3">
           <StreakBadge streak={stats?.streak ?? null} />
 
+          <Link
+            href="/loja"
+            className="flex items-center gap-2 rounded-lg border border-ink-600 px-3 py-1.5 text-sm font-semibold transition hover:border-flare-400 hover:text-flare-400"
+          >
+            <span aria-hidden>🪙</span>
+            <span className="tabular-nums">{wallet.coins.toLocaleString("pt-BR")}</span>
+          </Link>
+
           {account?.authenticated ? (
             <div className="flex items-center gap-3 text-sm">
               <span className="text-mist-300">
@@ -246,7 +257,7 @@ export default function HomePage() {
 
         {editing && (
           <div className="mt-6 border-t border-ink-700 pt-6">
-            <AvatarEditor avatar={profile.avatar} onChange={updateAvatar} />
+            <AvatarEditor avatar={profile.avatar} owned={wallet.items} onChange={updateAvatar} />
           </div>
         )}
 
@@ -344,9 +355,17 @@ export default function HomePage() {
           Cada rodada vale até <strong className="text-mist-100">5.000 pontos</strong> — quanto mais
           perto do local real, maior a nota.
         </p>
-        <Link href="/ranking" className="font-semibold text-beam-400 hover:underline">
-          Ver ranking e streaks →
-        </Link>
+        <span className="flex gap-4">
+          <Link href="/amigos" className="font-semibold text-mist-100 hover:underline">
+            Amigos
+          </Link>
+          <Link href="/loja" className="font-semibold text-flare-400 hover:underline">
+            Loja
+          </Link>
+          <Link href="/ranking" className="font-semibold text-beam-400 hover:underline">
+            Ranking e streaks →
+          </Link>
+        </span>
       </footer>
     </main>
   );

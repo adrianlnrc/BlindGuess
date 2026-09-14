@@ -2,7 +2,12 @@
 
 import { useState } from "react";
 import Avatar from "./Avatar";
-import type { GameMode, Player, RegionId, RoomSettings } from "@/lib/types";
+import {
+  DIFFICULTY_LABEL,
+  DIFFICULTY_ORDER,
+  mapsByDifficulty,
+} from "@/lib/catalog";
+import type { GameMode, Player, RoomSettings } from "@/lib/types";
 
 type Props = {
   code: string;
@@ -16,14 +21,13 @@ type Props = {
   onStart: () => void;
 };
 
-const REGIONS: { id: RegionId; label: string; hint: string }[] = [
-  { id: "world", label: "Mundo todo", hint: "qualquer canto do planeta" },
-  { id: "brazil", label: "Brasil", hint: "só território brasileiro" },
-  { id: "europe", label: "Europa", hint: "capitais e estradas europeias" },
-  { id: "americas", label: "Américas", hint: "do Alasca à Patagônia" },
-  { id: "asia", label: "Ásia", hint: "do Oriente Médio ao Japão" },
-  { id: "famous", label: "Pontos famosos", hint: "lugares icônicos, modo fácil" },
-];
+
+/** Cor do marcador de cada faixa de dificuldade. */
+const DIFFICULTY_DOT: Record<string, string> = {
+  facil: "bg-beam-400",
+  medio: "bg-flare-400",
+  dificil: "bg-rose-signal",
+};
 
 const TIME_OPTIONS = [
   { value: 30, label: "30s" },
@@ -157,26 +161,36 @@ export default function Lobby({
           )}
         </h2>
 
-        <div>
-          <p className="mb-2 text-sm text-mist-300">Região</p>
-          <div className="grid gap-2 sm:grid-cols-3">
-            {REGIONS.map((region) => (
-              <button
-                key={region.id}
-                type="button"
-                disabled={locked}
-                onClick={() => onUpdateSettings({ region: region.id })}
-                className={`rounded-xl border px-3 py-2.5 text-left transition disabled:cursor-not-allowed ${
-                  settings.region === region.id
-                    ? "border-beam-500 bg-beam-500/10 text-beam-400"
-                    : "border-ink-600 hover:border-ink-500"
-                }`}
-              >
-                <span className="block font-medium">{region.label}</span>
-                <span className="block text-xs text-mist-300">{region.hint}</span>
-              </button>
-            ))}
-          </div>
+        <div className="space-y-4">
+          <p className="text-sm text-mist-300">Mapa</p>
+
+          {DIFFICULTY_ORDER.map((difficulty) => (
+            <div key={difficulty}>
+              <p className="mb-2 flex items-center gap-2 text-xs tracking-widest text-mist-300 uppercase">
+                <span className={`size-1.5 rounded-full ${DIFFICULTY_DOT[difficulty]}`} />
+                {DIFFICULTY_LABEL[difficulty]}
+              </p>
+
+              <div className="grid gap-2 sm:grid-cols-3">
+                {mapsByDifficulty(difficulty).map((entry) => (
+                  <button
+                    key={entry.id}
+                    type="button"
+                    disabled={locked}
+                    onClick={() => onUpdateSettings({ region: entry.id })}
+                    className={`rounded-xl border px-3 py-2.5 text-left transition disabled:cursor-not-allowed ${
+                      settings.region === entry.id
+                        ? "border-beam-500 bg-beam-500/10 text-beam-400"
+                        : "border-ink-600 hover:border-ink-500"
+                    }`}
+                  >
+                    <span className="block font-medium">{entry.label}</span>
+                    <span className="block text-xs text-mist-300">{entry.hint}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
 
         <div className="grid gap-6 sm:grid-cols-2">

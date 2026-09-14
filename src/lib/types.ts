@@ -1,6 +1,15 @@
 export type LatLng = { lat: number; lng: number };
 
-export type RegionId = "world" | "brazil" | "europe" | "americas" | "asia" | "famous";
+export type RegionId =
+  | "world"
+  | "brazil"
+  | "europe"
+  | "americas"
+  | "asia"
+  | "famous"
+  | "africa"
+  | "oceania"
+  | "world_rural";
 
 export type RoomSettings = {
   rounds: number;
@@ -33,8 +42,25 @@ export type Avatar = {
   face: FaceId;
 };
 
-export type HatId = "none" | "cap" | "explorer" | "beanie" | "headphones";
-export type FaceId = "smile" | "focused" | "glasses" | "shades";
+export type HatId =
+  | "none"
+  | "cap"
+  | "explorer"
+  | "beanie"
+  | "headphones"
+  | "bucket"
+  | "visor"
+  | "helmet"
+  | "crown";
+
+export type FaceId =
+  | "smile"
+  | "focused"
+  | "glasses"
+  | "shades"
+  | "wink"
+  | "grin"
+  | "eyepatch";
 
 export const DEFAULT_AVATAR: Avatar = {
   skin: "#c98d63",
@@ -153,6 +179,15 @@ export type SoloEntry = {
   playedAt: number;
 };
 
+export type Friend = {
+  profileId: string;
+  name: string;
+  avatar: Avatar;
+  online: boolean;
+  level: number;
+  streak: number;
+};
+
 export type Leaderboards = {
   solo: SoloEntry[];
   streaks: { profileId: string; name: string; avatar: Avatar; current: number; longest: number }[];
@@ -225,6 +260,32 @@ export type ClientToServerEvents = {
     ack: (res: { stats: ProfileStats | null }) => void,
   ) => void;
   fetchLeaderboards: (ack: (res: { leaderboards: Leaderboards }) => void) => void;
+  /** Saldo de moedas e itens que o jogador possui. */
+  fetchWallet: (
+    payload: { profileId: string },
+    ack: (res: { coins: number; items: string[] }) => void,
+  ) => void;
+  /** Meu código de amigo e a lista de amigos com presença. */
+  fetchFriends: (
+    payload: { profileId: string },
+    ack: (res: { ok: true; myCode: string; friends: Friend[] } | { ok: false; error: string }) => void,
+  ) => void;
+  /** Adiciona um amigo pelo código dele. */
+  addFriend: (
+    payload: { profileId: string; code: string },
+    ack: (res: { ok: true; friends: Friend[] } | { ok: false; error: string }) => void,
+  ) => void;
+  removeFriend: (
+    payload: { profileId: string; friendId: string },
+    ack: (res: { ok: true; friends: Friend[] } | { ok: false; error: string }) => void,
+  ) => void;
+  /** Compra um item da loja com as moedas do jogador. */
+  buyItem: (
+    payload: { profileId: string; itemId: string },
+    ack: (
+      res: { ok: true; coins: number; items: string[] } | { ok: false; error: string },
+    ) => void,
+  ) => void;
   /** Estado do desafio do dia (sorteia os locais na primeira vez do dia). */
   fetchDaily: (
     payload: { profileId: string },
