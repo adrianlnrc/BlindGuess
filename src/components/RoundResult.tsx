@@ -1,5 +1,6 @@
 "use client";
 
+import Avatar from "./Avatar";
 import ResultMap, { PLAYER_COLORS } from "./ResultMap";
 import { formatDistance } from "@/lib/scoring";
 import type { RoomState } from "@/lib/types";
@@ -17,6 +18,7 @@ export default function RoundResult({ state, playerId, isHost, onNext }: Props) 
 
   const isLastRound = result.round >= state.settings.rounds;
   const missing = state.players.filter((p) => !result.guesses.some((g) => g.playerId === p.id));
+  const avatarOf = (id: string) => state.players.find((p) => p.id === id)?.avatar;
 
   return (
     <main className="flex h-dvh flex-col lg:flex-row">
@@ -43,12 +45,15 @@ export default function RoundResult({ state, playerId, isHost, onNext }: Props) 
               }`}
             >
               <div className="flex items-center justify-between gap-2">
-                <span className="flex items-center gap-2 font-medium">
+                <span className="flex min-w-0 items-center gap-2 font-medium">
                   <span
-                    className="size-2.5 rounded-full"
+                    className="size-2.5 shrink-0 rounded-full"
                     style={{ background: PLAYER_COLORS[index % PLAYER_COLORS.length] }}
                   />
-                  {guess.playerName}
+                  {avatarOf(guess.playerId) && (
+                    <Avatar avatar={avatarOf(guess.playerId)!} size={24} className="rounded-md" />
+                  )}
+                  <span className="truncate">{guess.playerName}</span>
                 </span>
                 <span className="font-bold text-beam-400">
                   +{guess.score.toLocaleString("pt-BR")}
@@ -74,7 +79,10 @@ export default function RoundResult({ state, playerId, isHost, onNext }: Props) 
           ))}
         </ol>
 
-        <section className="rounded-xl border border-ink-700 p-4">
+        <section
+          className="rounded-xl border border-ink-700 p-4"
+          hidden={state.players.length < 2}
+        >
           <h3 className="text-xs tracking-widest text-mist-300 uppercase">Placar geral</h3>
           <ul className="mt-2 space-y-1">
             {state.players.map((player) => (

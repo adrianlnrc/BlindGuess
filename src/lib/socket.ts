@@ -16,7 +16,6 @@ export function getSocket(): GameSocket {
 }
 
 const PLAYER_KEY = "blindguess:playerId";
-const NAME_KEY = "blindguess:name";
 
 export function storedPlayerId(code: string): string | undefined {
   if (typeof window === "undefined") return undefined;
@@ -25,13 +24,4 @@ export function storedPlayerId(code: string): string | undefined {
 
 export function rememberPlayer(code: string, playerId: string): void {
   window.localStorage.setItem(`${PLAYER_KEY}:${code}`, playerId);
-}
-
-export function storedName(): string {
-  if (typeof window === "undefined") return "";
-  return window.localStorage.getItem(NAME_KEY) ?? "";
-}
-
-export function rememberName(name: string): void {
-  window.localStorage.setItem(NAME_KEY, name);
 }

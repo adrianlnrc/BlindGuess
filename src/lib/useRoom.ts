@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { getSocket, rememberPlayer, storedName, storedPlayerId } from "./socket";
+import { loadProfile } from "./profile";
+import { getSocket, rememberPlayer, storedPlayerId } from "./socket";
 import type { LatLng, RoomSettings, RoomState } from "./types";
 
 export type JoinStatus = "connecting" | "joined" | "error";
@@ -19,14 +20,14 @@ export function useRoom(code: string) {
     const socket = getSocket();
 
     const join = () => {
-      const name = storedName();
-      if (!name) {
+      const profile = loadProfile();
+      if (!profile.name) {
         setStatus("error");
-        setError("Escolha um apelido para entrar na sala.");
+        setError("Escolha um apelido na tela inicial para entrar na sala.");
         return;
       }
 
-      socket.emit("joinRoom", { code, name, playerId: storedPlayerId(code) }, (res) => {
+      socket.emit("joinRoom", { code, profile, playerId: storedPlayerId(code) }, (res) => {
         if (res.ok) {
           rememberPlayer(code, res.playerId);
           setStatus("joined");

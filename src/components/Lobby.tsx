@@ -1,10 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import type { Player, RegionId, RoomSettings } from "@/lib/types";
+import Avatar from "./Avatar";
+import type { GameMode, Player, RegionId, RoomSettings } from "@/lib/types";
 
 type Props = {
   code: string;
+  mode: GameMode;
+  challenge: { code: string; creatorName: string } | null;
   players: Player[];
   settings: RoomSettings;
   isHost: boolean;
@@ -32,6 +35,8 @@ const TIME_OPTIONS = [
 
 export default function Lobby({
   code,
+  mode,
+  challenge,
   players,
   settings,
   isHost,
@@ -40,6 +45,8 @@ export default function Lobby({
   onStart,
 }: Props) {
   const [copied, setCopied] = useState(false);
+  // Num desafio os locais ja estao fixos, entao ninguem muda a configuracao.
+  const locked = !isHost || !!challenge;
 
   async function copyInvite() {
     await navigator.clipboard.writeText(`${window.location.origin}/room/${code}`);
@@ -51,16 +58,27 @@ export default function Lobby({
     <main className="mx-auto flex min-h-dvh w-full max-w-4xl flex-col gap-8 px-6 py-12">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-sm tracking-widest text-mist-300 uppercase">Sala</p>
-          <h1 className="text-5xl font-black tracking-[0.3em] text-beam-400">{code}</h1>
+          <p className="text-sm tracking-widest text-mist-300 uppercase">
+            {mode === "solo" ? "Partida solo" : mode === "challenge" ? "Desafio" : "Sala"}
+          </p>
+          {mode === "party" ? (
+            <h1 className="text-5xl font-black tracking-[0.3em] text-beam-400">{code}</h1>
+          ) : (
+            <h1 className="text-4xl font-black">
+              {mode === "solo" ? "Só você contra o mapa" : `Desafio de ${challenge?.creatorName}`}
+            </h1>
+          )}
         </div>
-        <button
-          type="button"
-          onClick={copyInvite}
-          className="rounded-xl border border-ink-600 px-4 py-2.5 font-medium transition hover:border-beam-500 hover:text-beam-400"
-        >
-          {copied ? "Link copiado!" : "Copiar convite"}
-        </button>
+
+        {mode === "party" && (
+          <button
+            type="button"
+            onClick={copyInvite}
+            className="rounded-xl border border-ink-600 px-4 py-2.5 font-medium transition hover:border-beam-500 hover:text-beam-400"
+          >
+            {copied ? "Link copiado!" : "Copiar convite"}
+          </button>
+        )}
       </header>
 
       {error && (
@@ -69,30 +87,40 @@ export default function Lobby({
         </p>
       )}
 
-      <section className="panel rounded-2xl p-6">
-        <h2 className="text-sm font-semibold tracking-widest text-mist-300 uppercase">
-          Jogadores ({players.length})
-        </h2>
-        <ul className="mt-4 grid gap-2 sm:grid-cols-2">
-          {players.map((player) => (
-            <li
-              key={player.id}
-              className="flex items-center justify-between rounded-xl border border-ink-700 bg-ink-950/50 px-4 py-3"
-            >
-              <span className="font-medium">{player.name}</span>
-              {player.isHost && (
-                <span className="rounded-full bg-flare-400/15 px-2 py-0.5 text-xs text-flare-400">
-                  anfitrião
-                </span>
-              )}
-            </li>
-          ))}
-        </ul>
-      </section>
+      {mode === "party" && (
+        <section className="panel rounded-2xl p-6">
+          <h2 className="text-sm font-semibold tracking-widest text-mist-300 uppercase">
+            Jogadores ({players.length})
+          </h2>
+          <ul className="mt-4 grid gap-2 sm:grid-cols-2">
+            {players.map((player) => (
+              <li
+                key={player.id}
+                className="flex items-center gap-3 rounded-xl border border-ink-700 bg-ink-950/50 px-4 py-3"
+              >
+                <Avatar avatar={player.avatar} size={36} className="rounded-lg" />
+                <span className="flex-1 truncate font-medium">{player.name}</span>
+                {player.isHost && (
+                  <span className="rounded-full bg-flare-400/15 px-2 py-0.5 text-xs text-flare-400">
+                    anfitrião
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section className="panel space-y-6 rounded-2xl p-6">
         <h2 className="text-sm font-semibold tracking-widest text-mist-300 uppercase">
-          Configuração {!isHost && <span className="normal-case">(só o anfitrião muda)</span>}
+          Configuração{" "}
+          {locked && (
+            <span className="normal-case">
+              {mode === "challenge"
+                ? "(travada: os locais do desafio já foram sorteados)"
+                : "(só o anfitrião muda)"}
+            </span>
+          )}
         </h2>
 
         <div>
@@ -102,7 +130,7 @@ export default function Lobby({
               <button
                 key={region.id}
                 type="button"
-                disabled={!isHost}
+                disabled={locked}
                 onClick={() => onUpdateSettings({ region: region.id })}
                 className={`rounded-xl border px-3 py-2.5 text-left transition disabled:cursor-not-allowed ${
                   settings.region === region.id
@@ -128,7 +156,7 @@ export default function Lobby({
               min={1}
               max={20}
               value={settings.rounds}
-              disabled={!isHost}
+              disabled={locked}
               onChange={(e) => onUpdateSettings({ rounds: Number(e.target.value) })}
               className="mt-3 w-full accent-beam-500"
             />
@@ -141,7 +169,7 @@ export default function Lobby({
                 <button
                   key={option.value}
                   type="button"
-                  disabled={!isHost}
+                  disabled={locked}
                   onClick={() => onUpdateSettings({ roundSeconds: option.value })}
                   className={`rounded-lg border px-3 py-1.5 text-sm transition disabled:cursor-not-allowed ${
                     settings.roundSeconds === option.value
@@ -168,12 +196,12 @@ export default function Lobby({
               key={key}
               className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 ${
                 settings[key] ? "border-beam-500/50 text-beam-400" : "border-ink-600 text-mist-300"
-              } ${isHost ? "cursor-pointer" : "cursor-not-allowed"}`}
+              } ${locked ? "cursor-not-allowed" : "cursor-pointer"}`}
             >
               <input
                 type="checkbox"
                 checked={settings[key]}
-                disabled={!isHost}
+                disabled={locked}
                 onChange={(e) => onUpdateSettings({ [key]: e.target.checked })}
                 className="size-4 accent-beam-500"
               />
@@ -189,7 +217,7 @@ export default function Lobby({
           onClick={onStart}
           className="rounded-2xl bg-beam-500 px-6 py-4 text-xl font-bold text-ink-950 transition hover:bg-beam-400"
         >
-          Começar partida
+          {mode === "solo" ? "Começar" : mode === "challenge" ? "Jogar o desafio" : "Começar partida"}
         </button>
       ) : (
         <p className="rounded-2xl border border-ink-600 px-6 py-4 text-center text-mist-300">

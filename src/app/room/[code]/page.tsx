@@ -56,6 +56,8 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
       return (
         <Lobby
           code={state.code}
+          mode={state.mode}
+          challenge={state.challenge}
           players={state.players}
           settings={state.settings}
           isHost={isHost}
