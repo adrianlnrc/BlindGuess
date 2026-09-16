@@ -18,6 +18,8 @@ export default function RoundResult({ state, playerId, isHost, onNext }: Props) 
   const result = state.lastResult;
   if (!result) return null;
 
+  // O sorteio do local desistiu: o placar esta guardado e da para tentar de novo.
+  const retry = state.canRetryRound;
   const isLastRound = state.duel
     ? !!state.duel.winnerId
     : result.round >= state.settings.rounds;
@@ -146,10 +148,20 @@ export default function RoundResult({ state, playerId, isHost, onNext }: Props) 
             onClick={onNext}
             className="mt-auto rounded-xl bg-beam-500 px-4 py-3 text-lg font-bold text-ink-950 transition hover:bg-beam-400"
           >
-            {isLastRound ? (state.duel ? "Ver o resultado" : "Ver placar final") : "Próxima rodada"}
+            {retry
+              ? "Tentar a rodada de novo"
+              : isLastRound
+                ? state.duel
+                  ? "Ver o resultado"
+                  : "Ver placar final"
+                : "Próxima rodada"}
           </button>
         ) : (
-          <p className="mt-auto text-center text-mist-300">Esperando o anfitrião continuar…</p>
+          <p className="mt-auto text-center text-mist-300">
+            {retry
+              ? "Esperando o anfitrião tentar a rodada de novo…"
+              : "Esperando o anfitrião continuar…"}
+          </p>
         )}
       </aside>
     </main>

@@ -12,6 +12,7 @@ import {
   type PlayerProfile,
   type RoomState,
   type RoundResult,
+  type LocationSearch,
 } from "@/lib/types";
 import { pickLocation, type PickedLocation } from "./locations";
 import {
@@ -56,6 +57,10 @@ type Room = {
   timer: NodeJS.Timeout | null;
   lastResult: RoundResult | null;
   error?: string;
+  /** Progresso da busca pelo local, enquanto ela acontece. */
+  search: LocationSearch | null;
+  /** O sorteio do local desistiu: da para tentar a mesma rodada de novo. */
+  canRetryRound: boolean;
   /** Ultima interacao, usada para limpar salas abandonadas. */
   touchedAt: number;
 };
@@ -82,11 +87,34 @@ const ROOM_TTL_MS = 6 * 60 * 60 * 1000;
 const MAX_PLAYERS = 12;
 /** Folga para o tempo de rede antes do servidor fechar a rodada. */
 const TIMER_GRACE_MS = 1500;
+/** Quantas vezes tentamos sortear o local antes de desistir da rodada. */
+const LOCATION_ATTEMPTS = 3;
+/** Espera crescente entre as tentativas de sorteio (ms). */
+const LOCATION_RETRY_DELAYS_MS = [400, 1000, 2000];
+/** Texto unico de falha, com o que vale a pena conferir. */
+const LOCATION_ERROR =
+  "Não consegui carregar um local do Street View depois de várias tentativas. " +
+  "Confira a GOOGLE_MAPS_API_KEY e a cota da API do Maps — o placar está guardado, dá para tentar de novo.";
+
+/** Pontos de injecao usados nos testes; em producao valem os padroes. */
+export type RoomManagerOptions = {
+  /** Sorteio do local; trocado nos testes para nao depender da API do Maps. */
+  pickLocation?: typeof pickLocation;
+  /** Espera entre as tentativas de sorteio, em ms. */
+  retryDelaysMs?: number[];
+};
 
 export class RoomManager {
   private rooms = new Map<string, Room>();
+  private pickLocation: typeof pickLocation;
+  private retryDelays: number[];
 
-  constructor(private broadcast: (code: string) => void) {
+  constructor(
+    private broadcast: (code: string) => void,
+    options: RoomManagerOptions = {},
+  ) {
+    this.pickLocation = options.pickLocation ?? pickLocation;
+    this.retryDelays = options.retryDelaysMs ?? LOCATION_RETRY_DELAYS_MS;
     setInterval(() => this.cleanup(), 15 * 60 * 1000).unref?.();
   }
 
@@ -142,6 +170,8 @@ export class RoomManager {
       roundEndsAt: null,
       timer: null,
       lastResult: null,
+      search: null,
+      canRetryRound: false,
       touchedAt: Date.now(),
     };
 
@@ -349,7 +379,7 @@ export class RoomManager {
     const used = new Set<string>();
 
     for (let i = 0; i < settings.rounds; i++) {
-      const location = await pickLocation(settings.region, 12, used);
+      const location = await this.pickLocation(settings.region, 12, used);
       if (!location) return null;
       used.add(location.panoId);
       locations.push(location);
@@ -433,6 +463,8 @@ export class RoomManager {
     room.lastResult = null;
     room.roundEndsAt = null;
     room.error = undefined;
+    room.search = null;
+    room.canRetryRound = false;
     room.playedLocations = [];
     room.sharedChallengeCode = null;
     room.recorded = false;
@@ -469,24 +501,27 @@ export class RoomManager {
     this.clearTimer(room);
     room.guesses.clear();
     room.error = undefined;
+    room.canRetryRound = false;
     room.target = null;
     room.roundEndsAt = null;
     room.phase = "playing";
     room.round += 1;
     room.touchedAt = Date.now();
     // Mostra "carregando" enquanto a API procura um panorama.
+    room.search = { attempt: 1, maxAttempts: room.fixedLocations ? 1 : LOCATION_ATTEMPTS };
     this.broadcast(room.code);
 
     const location = room.fixedLocations
       ? (room.fixedLocations[room.round - 1] ?? null)
-      : await pickLocation(room.settings.region, 12, room.usedPanos);
+      : await this.pickWithRetry(room);
+
+    // A sala pode ter sido fechada ou reiniciada durante a espera.
+    if (this.rooms.get(room.code) !== room) return;
+
+    room.search = null;
 
     if (!location) {
-      room.phase = room.round > 1 ? "round-result" : "lobby";
-      room.round = Math.max(0, room.round - 1);
-      room.error =
-        "Não consegui carregar um local do Street View. Confira a GOOGLE_MAPS_API_KEY e a cota da API.";
-      this.broadcast(room.code);
+      this.giveUpRound(room);
       return;
     }
 
@@ -494,12 +529,68 @@ export class RoomManager {
     room.usedPanos.add(location.panoId);
     room.playedLocations.push(location);
 
+    // O cronometro so comeca agora: as tentativas nao podem comer o tempo de jogo.
     if (room.settings.roundSeconds > 0) {
       room.roundEndsAt = Date.now() + room.settings.roundSeconds * 1000;
       room.timer = setTimeout(
         () => this.finishRound(room),
         room.settings.roundSeconds * 1000 + TIMER_GRACE_MS,
       );
+    }
+
+    this.broadcast(room.code);
+  }
+
+  /**
+   * Sorteia o local tentando algumas vezes, com espera crescente: falha de
+   * rede, timeout ou cota momentanea costuma passar na tentativa seguinte.
+   * Cada tentativa vai para a tela, para ninguem achar que travou.
+   */
+  private async pickWithRetry(room: Room): Promise<PickedLocation | null> {
+    for (let attempt = 1; attempt <= LOCATION_ATTEMPTS; attempt++) {
+      if (attempt > 1) {
+        room.search = { attempt, maxAttempts: LOCATION_ATTEMPTS };
+        this.broadcast(room.code);
+      }
+
+      let location: PickedLocation | null = null;
+      try {
+        location = await this.pickLocation(room.settings.region, 12, room.usedPanos);
+      } catch (err) {
+        console.error("[rooms] falha ao sortear local", err);
+      }
+
+      if (this.rooms.get(room.code) !== room) return null;
+      if (location) return location;
+
+      if (attempt < LOCATION_ATTEMPTS) {
+        await sleep(this.retryDelays[attempt - 1] ?? 1000);
+        if (this.rooms.get(room.code) !== room) return null;
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Desiste da rodada sem derrubar a partida: o placar fica intacto e o
+   * anfitriao pode tentar a mesma rodada de novo por `nextRound`.
+   */
+  private giveUpRound(room: Room): void {
+    this.clearTimer(room);
+    room.round = Math.max(0, room.round - 1);
+    room.target = null;
+    room.roundEndsAt = null;
+    room.error = LOCATION_ERROR;
+
+    if (room.lastResult) {
+      // Ja houve rodada: volta para a tela de resultado, com o placar de pe.
+      room.phase = "round-result";
+      room.canRetryRound = true;
+    } else {
+      // Falhou logo na primeira rodada: nao ha placar a perder, volta ao lobby.
+      room.phase = "lobby";
+      room.canRetryRound = false;
     }
 
     this.broadcast(room.code);
@@ -665,6 +756,8 @@ export class RoomManager {
       submitted: [...room.guesses.keys()],
       lastResult: room.lastResult,
       error: room.error,
+      locationSearch: room.search,
+      canRetryRound: room.canRetryRound,
     };
   }
 
@@ -711,6 +804,10 @@ export class RoomManager {
       if (room.touchedAt < cutoff) this.destroy(room);
     }
   }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function randomId(): string {

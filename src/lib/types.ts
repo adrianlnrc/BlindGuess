@@ -215,6 +215,24 @@ export type RoomState = {
   submitted: string[];
   lastResult: RoundResult | null;
   error?: string;
+  /**
+   * Preenchido enquanto o servidor procura o local da rodada. Serve para a
+   * tela mostrar "tentativa 2 de 3" em vez de parecer travada.
+   */
+  locationSearch: LocationSearch | null;
+  /**
+   * true quando o sorteio do local desistiu: o placar esta intacto e o
+   * anfitriao pode tentar a mesma rodada de novo.
+   */
+  canRetryRound: boolean;
+};
+
+/** Progresso da busca pelo panorama da rodada. */
+export type LocationSearch = {
+  /** Tentativa em andamento, comecando em 1. */
+  attempt: number;
+  /** Quantas tentativas serao feitas no total. */
+  maxAttempts: number;
 };
 
 export type ServerToClientEvents = {

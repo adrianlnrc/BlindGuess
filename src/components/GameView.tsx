@@ -18,10 +18,20 @@ export default function GameView({ state, playerId, onGuess }: Props) {
   const waiting = state.players.filter((p) => p.connected && !state.submitted.includes(p.id));
 
   if (!state.panorama) {
+    const search = state.locationSearch;
     return (
-      <main className="grid min-h-dvh place-content-center gap-3 text-center">
+      <main className="grid min-h-dvh place-content-center gap-3 px-6 text-center">
         <p className="text-2xl font-semibold">Procurando um lugar no mundo…</p>
-        <p className="text-mist-300">Sorteando um panorama válido do Street View.</p>
+        <p className="text-mist-300">
+          {search && search.attempt > 1
+            ? `Não deu de primeira — tentativa ${search.attempt} de ${search.maxAttempts}.`
+            : "Sorteando um panorama válido do Street View."}
+        </p>
+        {state.error && (
+          <p className="mx-auto max-w-md rounded-xl border border-flare-400/40 bg-flare-400/10 px-4 py-3 text-sm text-flare-400">
+            {state.error}
+          </p>
+        )}
       </main>
     );
   }
