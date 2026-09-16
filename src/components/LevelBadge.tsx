@@ -29,7 +29,7 @@ export default function LevelBadge({ xp, size = 44, showProgress = true }: Props
           />
         </svg>
         <span
-          className="absolute inset-0 grid place-content-center font-bold tabular-nums"
+          className="absolute inset-0 grid place-content-center font-bold num"
           style={{ fontSize: size * 0.4 }}
         >
           {info.level}
@@ -41,7 +41,7 @@ export default function LevelBadge({ xp, size = 44, showProgress = true }: Props
           <p className="text-xs tracking-widest text-mist-300 uppercase">Nível {info.level}</p>
           <p className="text-sm text-mist-300">
             faltam{" "}
-            <strong className="text-mist-100 tabular-nums">
+            <strong className="text-mist-100 num">
               {info.toNextLevel.toLocaleString("pt-BR")}
             </strong>{" "}
             pts

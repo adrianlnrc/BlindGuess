@@ -1,5 +1,22 @@
 import type { Metadata, Viewport } from "next";
+import { Outfit, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
+
+/** Voz pesada: títulos, placar, cronômetro, vida, moedas. */
+const display = Outfit({
+  subsets: ["latin"],
+  weight: ["600", "700", "800", "900"],
+  variable: "--font-display",
+  display: "swap",
+});
+
+/** Voz de leitura: tudo que é texto corrido e rótulo. */
+const body = Plus_Jakarta_Sans({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-body",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "BlindGuess — adivinhe onde você está",
@@ -8,7 +25,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#080c14",
+  themeColor: "#140a2b",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
@@ -16,7 +33,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="pt-BR">
+    <html lang="pt-BR" className={`${display.variable} ${body.variable}`}>
       <body className="min-h-dvh antialiased">{children}</body>
     </html>
   );

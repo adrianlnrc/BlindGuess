@@ -126,7 +126,7 @@ export default function RoundResult({ state, playerId, isHost, onNext }: Props) 
             {state.players.map((player) => (
               <li key={player.id} className="flex justify-between text-sm">
                 <span>{player.name}</span>
-                <span className="font-semibold tabular-nums">
+                <span className="font-semibold num">
                   {player.totalScore.toLocaleString("pt-BR")}
                 </span>
               </li>

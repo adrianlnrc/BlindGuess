@@ -66,7 +66,7 @@ export default function RankingPage() {
                         {entry.rounds} rodadas · {mapLabel(entry.region)}
                       </p>
                     </div>
-                    <span className="font-bold tabular-nums text-beam-400">
+                    <span className="font-bold num text-beam-400">
                       {entry.score.toLocaleString("pt-BR")}
                     </span>
                   </li>
@@ -95,7 +95,7 @@ export default function RankingPage() {
                       <p className="truncate font-medium">{entry.name}</p>
                       <p className="text-xs text-mist-300">recorde: {entry.longest} dias</p>
                     </div>
-                    <span className="font-bold tabular-nums text-flare-400">
+                    <span className="font-bold num text-flare-400">
                       🔥 {entry.current}
                     </span>
                   </li>

@@ -33,7 +33,7 @@ export default function DuelBars({ duel, players, meId, hitId, compact = false }
                   {player.id === meId && <span className="text-mist-300"> (você)</span>}
                 </span>
                 <span
-                  className={`text-sm font-bold tabular-nums ${
+                  className={`text-sm font-bold num ${
                     hp <= 0 ? "text-rose-signal" : low ? "text-flare-400" : "text-mist-100"
                   }`}
                 >

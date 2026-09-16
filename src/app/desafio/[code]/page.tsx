@@ -118,7 +118,7 @@ export default function ChallengePage({ params }: { params: Promise<{ code: stri
                 <span className="w-7 text-center text-lg">{MEDALS[index] ?? index + 1}</span>
                 <Avatar avatar={entry.avatar} size={32} className="rounded-lg" />
                 <span className="flex-1 truncate font-medium">{entry.name}</span>
-                <span className="font-bold tabular-nums text-beam-400">
+                <span className="font-bold num text-beam-400">
                   {entry.totalScore.toLocaleString("pt-BR")}
                 </span>
               </li>

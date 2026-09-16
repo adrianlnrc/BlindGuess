@@ -115,7 +115,7 @@ export default function FriendsPage() {
       <section className="panel flex flex-wrap items-center justify-between gap-4 rounded-2xl p-6">
         <div>
           <p className="text-xs tracking-widest text-mist-300 uppercase">Seu código</p>
-          <p className="text-3xl font-black tracking-[0.3em] text-beam-400">{myCode ?? "·····"}</p>
+          <p className="num text-3xl tracking-[0.28em] text-beam-400">{myCode ?? "·····"}</p>
         </div>
         <button
           type="button"

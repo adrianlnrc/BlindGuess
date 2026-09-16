@@ -36,7 +36,7 @@ export default function GameView({ state, playerId, onGuess }: Props) {
       <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-4 p-4">
         <div className="panel rounded-xl px-4 py-2.5">
           <p className="text-xs tracking-widest text-mist-300 uppercase">Rodada</p>
-          <p className="text-xl font-bold">
+          <p className="num text-xl">
             {state.round}
             {!state.duel && <span className="text-mist-300">/{state.settings.rounds}</span>}
           </p>
@@ -50,7 +50,7 @@ export default function GameView({ state, playerId, onGuess }: Props) {
           >
             <p className="text-xs tracking-widest text-mist-300 uppercase">Tempo</p>
             <p
-              className={`text-2xl font-bold tabular-nums ${lowTime ? "text-rose-signal" : ""}`}
+              className={`text-2xl font-bold num ${lowTime ? "text-rose-signal" : ""}`}
             >
               {formatClock(remaining)}
             </p>
@@ -70,7 +70,7 @@ export default function GameView({ state, playerId, onGuess }: Props) {
         ) : (
           <div className="panel max-w-48 rounded-xl px-4 py-2.5">
             <p className="text-xs tracking-widest text-mist-300 uppercase">Palpitaram</p>
-            <p className="text-xl font-bold">
+            <p className="num text-xl">
               {state.submitted.length}
               <span className="text-mist-300">
                 /{state.players.filter((p) => p.connected).length}

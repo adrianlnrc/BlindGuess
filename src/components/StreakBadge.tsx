@@ -18,7 +18,7 @@ export default function StreakBadge({ streak }: { streak: StreakInfo | null }) {
           🔥
         </span>
         <div>
-          <p className="text-2xl font-black tabular-nums">
+          <p className="text-2xl font-black num">
             {current}
             <span className="ml-1 text-sm font-medium text-mist-300">
               {current === 1 ? "dia" : "dias"}

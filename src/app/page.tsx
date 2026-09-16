@@ -198,7 +198,7 @@ export default function HomePage() {
             className="flex items-center gap-2 rounded-lg border border-ink-600 px-3 py-1.5 text-sm font-semibold transition hover:border-flare-400 hover:text-flare-400"
           >
             <span aria-hidden>🪙</span>
-            <span className="tabular-nums">{wallet.coins.toLocaleString("pt-BR")}</span>
+            <span className="num">{wallet.coins.toLocaleString("pt-BR")}</span>
           </Link>
 
           {account?.authenticated ? (
@@ -375,7 +375,7 @@ function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <dt className="text-xs tracking-widest text-mist-300 uppercase">{label}</dt>
-      <dd className="text-xl font-bold tabular-nums">{value}</dd>
+      <dd className="text-xl font-bold num">{value}</dd>
     </div>
   );
 }

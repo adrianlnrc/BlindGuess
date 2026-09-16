@@ -16,7 +16,7 @@ export default function ScoreBar({ score, distanceMeters }: Props) {
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-baseline justify-between gap-3">
-        <span className="text-3xl font-black tabular-nums text-beam-400">
+        <span className="text-3xl font-black num text-beam-400">
           {shown.toLocaleString("pt-BR")}
           <span className="ml-1 text-sm font-medium text-mist-300">
             / {MAX_ROUND_SCORE.toLocaleString("pt-BR")}

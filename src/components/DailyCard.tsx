@@ -30,7 +30,7 @@ export default function DailyCard({ daily, error, loading, disabled, onPlay }: P
         </div>
         {remaining && (
           <span className="rounded-lg border border-ink-600 px-3 py-1.5 text-sm text-mist-300">
-            novo em <strong className="text-mist-100 tabular-nums">{remaining}</strong>
+            novo em <strong className="text-mist-100 num">{remaining}</strong>
           </span>
         )}
       </div>
@@ -45,7 +45,7 @@ export default function DailyCard({ daily, error, loading, disabled, onPlay }: P
             <div className="flex flex-wrap items-center justify-between gap-3">
               <span className="text-sm text-mist-300">{daily.rounds} rodadas · mundo todo</span>
               {daily.alreadyPlayed && daily.myScore !== null && (
-                <span className="rounded-lg bg-beam-500/10 px-3 py-1.5 text-sm font-semibold text-beam-400 tabular-nums">
+                <span className="rounded-lg bg-beam-500/10 px-3 py-1.5 text-sm font-semibold text-beam-400 num">
                   sua marca: {daily.myScore.toLocaleString("pt-BR")}
                 </span>
               )}
@@ -55,10 +55,10 @@ export default function DailyCard({ daily, error, loading, disabled, onPlay }: P
               <ol className="flex flex-col gap-1.5">
                 {daily.topEntries.map((entry, index) => (
                   <li key={entry.profileId} className="flex items-center gap-2.5 text-sm">
-                    <span className="w-4 text-center text-mist-300 tabular-nums">{index + 1}</span>
+                    <span className="w-4 text-center text-mist-300 num">{index + 1}</span>
                     <Avatar avatar={entry.avatar} size={22} className="rounded-md" />
                     <span className="flex-1 truncate">{entry.name}</span>
-                    <span className="font-semibold text-beam-400 tabular-nums">
+                    <span className="font-semibold text-beam-400 num">
                       {entry.totalScore.toLocaleString("pt-BR")}
                     </span>
                   </li>

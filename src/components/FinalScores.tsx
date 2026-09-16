@@ -99,7 +99,7 @@ export default function FinalScores({ state, playerId, isHost, onPlayAgain }: Pr
               <Avatar avatar={player.avatar} size={40} className="rounded-lg" />
               <span className="truncate text-lg font-semibold">{player.name}</span>
             </span>
-            <span className="text-xl font-bold tabular-nums text-beam-400">
+            <span className="text-xl font-bold num text-beam-400">
               {player.totalScore.toLocaleString("pt-BR")}
             </span>
           </li>

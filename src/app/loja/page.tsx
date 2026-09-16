@@ -97,7 +97,7 @@ export default function ShopPage() {
         <div className="flex items-center gap-3">
           <span className="flex items-center gap-2 rounded-xl border border-flare-400/40 bg-flare-400/10 px-4 py-2.5 text-lg font-bold text-flare-400">
             <span aria-hidden>🪙</span>
-            <span className="tabular-nums">{wallet.coins.toLocaleString("pt-BR")}</span>
+            <span className="num">{wallet.coins.toLocaleString("pt-BR")}</span>
           </span>
           <Link
             href="/"
@@ -136,7 +136,7 @@ export default function ShopPage() {
                     ) : (
                       <p className="flex items-center gap-1 text-sm text-flare-400">
                         <span aria-hidden>🪙</span>
-                        <span className="tabular-nums">{item.price.toLocaleString("pt-BR")}</span>
+                        <span className="num">{item.price.toLocaleString("pt-BR")}</span>
                       </p>
                     )}
                   </div>
