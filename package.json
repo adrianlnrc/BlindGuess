@@ -9,7 +9,8 @@
     "start": "NODE_ENV=production tsx server.ts",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "teste:navegador": "tsx scripts/teste-navegador.ts"
+    "teste:navegador": "tsx scripts/teste-navegador.ts",
+    "teste:integracao-maps": "tsx scripts/teste-integracao-maps.ts"
   },
   "dependencies": {
     "@auth/pg-adapter": "^1.11.3",
