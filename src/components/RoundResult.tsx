@@ -3,6 +3,7 @@
 import Avatar from "./Avatar";
 import DuelBars from "./DuelBars";
 import ResultMap, { PLAYER_COLORS } from "./ResultMap";
+import ScoreBar from "./ScoreBar";
 import { formatDistance } from "@/lib/scoring";
 import type { RoomState } from "@/lib/types";
 
@@ -22,6 +23,7 @@ export default function RoundResult({ state, playerId, isHost, onNext }: Props) 
     : result.round >= state.settings.rounds;
   const missing = state.players.filter((p) => !result.guesses.some((g) => g.playerId === p.id));
   const avatarOf = (id: string) => state.players.find((p) => p.id === id)?.avatar;
+  const myGuess = result.guesses.find((g) => g.playerId === playerId) ?? null;
 
   return (
     <main className="flex h-dvh flex-col lg:flex-row">
@@ -61,6 +63,12 @@ export default function RoundResult({ state, playerId, isHost, onNext }: Props) 
                 <span className="text-mist-300">Empate na rodada — ninguém perdeu vida.</span>
               )}
             </p>
+          </section>
+        )}
+
+        {myGuess && (
+          <section className="rounded-xl border border-beam-500/40 bg-beam-500/5 p-4">
+            <ScoreBar score={myGuess.score} distanceMeters={myGuess.distanceMeters} />
           </section>
         )}
 
