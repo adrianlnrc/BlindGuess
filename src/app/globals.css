@@ -1,16 +1,16 @@
 @import "tailwindcss";
 
 @theme {
-  /* Fundo violeta profundo: escuro o bastante para o panorama dominar a tela,
-     quente o bastante para não virar um buraco preto. */
-  --color-ink-950: #140a2b;
-  --color-ink-900: #1c1039;
-  --color-ink-800: #261748;
-  --color-ink-700: #35215f;
-  --color-ink-600: #4a3080;
+  /* Violeta contido: a cor está presente, mas cede o palco para o panorama
+     em vez de disputar com ele. */
+  --color-ink-950: #110b20;
+  --color-ink-900: #181230;
+  --color-ink-800: #20183d;
+  --color-ink-700: #2b2050;
+  --color-ink-600: #3c2e6b;
 
-  --color-mist-300: #a99ac9;
-  --color-mist-100: #efeaff;
+  --color-mist-300: #a79cc0;
+  --color-mist-100: #ece9f6;
 
   --color-beam-400: #3ce7ad;
   --color-beam-500: #16c491;
@@ -29,9 +29,9 @@ body {
 
 body {
   background:
-    radial-gradient(1200px 760px at 10% -12%, rgba(124, 58, 237, 0.42), transparent 62%),
-    radial-gradient(940px 640px at 94% -4%, rgba(60, 231, 173, 0.14), transparent 58%),
-    radial-gradient(760px 620px at 70% 105%, rgba(255, 95, 141, 0.12), transparent 60%),
+    radial-gradient(1200px 760px at 10% -12%, rgba(124, 58, 237, 0.24), transparent 62%),
+    radial-gradient(940px 640px at 94% -4%, rgba(60, 231, 173, 0.10), transparent 58%),
+    radial-gradient(760px 620px at 70% 105%, rgba(255, 95, 141, 0.08), transparent 60%),
     var(--color-ink-950);
   color: var(--color-mist-100);
   font-family: var(--font-body), ui-sans-serif, system-ui, sans-serif;
