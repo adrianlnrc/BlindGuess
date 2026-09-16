@@ -62,6 +62,8 @@ export default function GuessMap({ onConfirm, disabled }: Props) {
   const [pinned, setPinned] = useState(false);
   // Só vale no toque: mapa aberto em tela cheia.
   const [aberto, setAberto] = useState(false);
+  // A API do Maps pode não carregar (chave ausente, cota, rede): avisa em vez de sumir.
+  const [erro, setErro] = useState<string | null>(null);
 
   // Sem fixar, passar o mouse já aumenta um degrau.
   const activeStep = pinned ? step : hovering ? Math.max(step, 1) : step;
@@ -71,52 +73,54 @@ export default function GuessMap({ onConfirm, disabled }: Props) {
   useEffect(() => {
     let cancelled = false;
 
-    loadMaps().then((maps) => {
-      if (cancelled || !containerRef.current || mapRef.current) return;
+    loadMaps()
+      .then((maps) => {
+        if (cancelled || !containerRef.current || mapRef.current) return;
 
-      const map = new maps.Map(containerRef.current, {
-        center: { lat: 15, lng: 0 },
-        zoom: 1,
-        disableDefaultUI: true,
-        zoomControl: ponteiroFinoRef.current,
-        // Um dedo arrasta o mapa em vez de pedir dois dedos.
-        gestureHandling: "greedy",
-        clickableIcons: false,
-        styles: DARK_MAP_STYLE,
-        minZoom: 1,
-        restriction: {
-          latLngBounds: { north: 85, south: -85, west: -180, east: 180 },
-          strictBounds: true,
-        },
-      });
+        const map = new maps.Map(containerRef.current, {
+          center: { lat: 15, lng: 0 },
+          zoom: 1,
+          disableDefaultUI: true,
+          zoomControl: ponteiroFinoRef.current,
+          // Um dedo arrasta o mapa em vez de pedir dois dedos.
+          gestureHandling: "greedy",
+          clickableIcons: false,
+          styles: DARK_MAP_STYLE,
+          minZoom: 1,
+          restriction: {
+            latLngBounds: { north: 85, south: -85, west: -180, east: 180 },
+            strictBounds: true,
+          },
+        });
 
-      map.addListener("click", (event: google.maps.MapMouseEvent) => {
-        const latLng = event.latLng;
-        if (!latLng) return;
+        map.addListener("click", (event: google.maps.MapMouseEvent) => {
+          const latLng = event.latLng;
+          if (!latLng) return;
 
-        const position = { lat: latLng.lat(), lng: latLng.lng() };
-        setGuess(position);
+          const position = { lat: latLng.lat(), lng: latLng.lng() };
+          setGuess(position);
 
-        if (markerRef.current) {
-          markerRef.current.setPosition(position);
-        } else {
-          markerRef.current = new maps.Marker({
-            position,
-            map,
-            icon: {
-              path: maps.SymbolPath.CIRCLE,
-              scale: 8,
-              fillColor: "#35d6a4",
-              fillOpacity: 1,
-              strokeColor: "#080c14",
-              strokeWeight: 2,
-            },
-          });
-        }
-      });
+          if (markerRef.current) {
+            markerRef.current.setPosition(position);
+          } else {
+            markerRef.current = new maps.Marker({
+              position,
+              map,
+              icon: {
+                path: maps.SymbolPath.CIRCLE,
+                scale: 8,
+                fillColor: "#35d6a4",
+                fillOpacity: 1,
+                strokeColor: "#080c14",
+                strokeWeight: 2,
+              },
+            });
+          }
+        });
 
-      mapRef.current = map;
-    });
+        mapRef.current = map;
+      })
+      .catch((err: Error) => !cancelled && setErro(err.message));
 
     return () => {
       cancelled = true;
@@ -188,6 +192,13 @@ export default function GuessMap({ onConfirm, disabled }: Props) {
           className={`size-full ${mapaInterativo ? "" : "pointer-events-none"}`}
           style={{ touchAction: mapaInterativo ? "none" : "auto" }}
         />
+
+        {erro && (
+          <div className="pointer-events-none absolute inset-0 grid place-content-center gap-1 p-4 text-center">
+            <p className="text-sm font-semibold text-rose-signal">Não deu para carregar o mapa</p>
+            <p className="text-xs text-mist-300">{erro}</p>
+          </div>
+        )}
 
         {ponteiroFino ? (
           <div className="absolute top-2 left-2 flex gap-1.5">
