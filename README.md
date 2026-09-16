@@ -185,6 +185,40 @@ Adicione um **Postgres** ao projeto e aponte `DATABASE_URL` para ele (no Railway
 Lembre que `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` é embutida no bundle **em tempo de build** —
 defina as variáveis antes de buildar, ou refaça o deploy depois de mudá-las.
 
+## Diagnóstico: `/api/health`
+
+Se o jogo não abre rodada em produção, chame `GET /api/health` antes de caçar log.
+A rota verifica cada dependência **na hora** — não só se a variável existe — e
+responde sempre HTTP 200, com o estado real no corpo:
+
+```bash
+curl -s https://SEU-DOMINIO/api/health
+```
+
+```json
+{
+  "ok": false,
+  "checks": {
+    "database": { "ok": true, "detail": "conectado" },
+    "mapsBrowserKey": { "ok": true, "detail": "definida — ..." },
+    "mapsServerKey": { "ok": false, "detail": "REQUEST_DENIED: ative a Street View Static API ..." },
+    "auth": { "ok": true, "detail": "google" }
+  }
+}
+```
+
+- `database` faz um `SELECT 1` de verdade no pool.
+- `mapsServerKey` faz uma chamada real à Street View Metadata API e traduz o
+  status (`REQUEST_DENIED` = API não ativada ou chave restrita demais;
+  `OVER_QUERY_LIMIT` = cota/faturamento).
+- `mapsBrowserKey` só confere presença — restrição por referrer não dá para
+  validar do servidor.
+- `auth` lista os provedores de login ligados.
+
+O `ok` geral ignora o banco de propósito: sem `DATABASE_URL` o jogo roda degradado
+(sem login, ranking nem streak), o que não é falha fatal. Nenhum valor de chave
+aparece na resposta.
+
 ## Estrutura
 
 ```
