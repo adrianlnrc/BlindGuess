@@ -278,35 +278,33 @@ export type ClientToServerEvents = {
     ack: (res: { stats: ProfileStats | null }) => void,
   ) => void;
   fetchLeaderboards: (ack: (res: { leaderboards: Leaderboards }) => void) => void;
-  /** Saldo de moedas e itens que o jogador possui. */
-  fetchWallet: (
-    payload: { profileId: string },
-    ack: (res: { coins: number; items: string[] }) => void,
-  ) => void;
+  /**
+   * Saldo de moedas e itens de quem está nesta conexão. Não leva profileId: a
+   * identidade vem da sessão ou do `identify`, nunca do payload.
+   */
+  fetchWallet: (ack: (res: { coins: number; items: string[] }) => void) => void;
   /** Meu código de amigo e a lista de amigos com presença. */
   fetchFriends: (
-    payload: { profileId: string },
     ack: (res: { ok: true; myCode: string; friends: Friend[] } | { ok: false; error: string }) => void,
   ) => void;
   /** Adiciona um amigo pelo código dele. */
   addFriend: (
-    payload: { profileId: string; code: string },
+    payload: { code: string },
     ack: (res: { ok: true; friends: Friend[] } | { ok: false; error: string }) => void,
   ) => void;
   removeFriend: (
-    payload: { profileId: string; friendId: string },
+    payload: { friendId: string },
     ack: (res: { ok: true; friends: Friend[] } | { ok: false; error: string }) => void,
   ) => void;
   /** Compra um item da loja com as moedas do jogador. */
   buyItem: (
-    payload: { profileId: string; itemId: string },
+    payload: { itemId: string },
     ack: (
       res: { ok: true; coins: number; items: string[] } | { ok: false; error: string },
     ) => void,
   ) => void;
   /** Estado do desafio do dia (sorteia os locais na primeira vez do dia). */
   fetchDaily: (
-    payload: { profileId: string },
     ack: (res: { ok: true; daily: DailyInfo } | { ok: false; error: string }) => void,
   ) => void;
   /** Abre uma sala com o desafio do dia. */

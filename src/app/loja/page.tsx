@@ -23,17 +23,25 @@ export default function ShopPage() {
 
   useEffect(() => setProfile(loadProfile()), []);
 
+  /**
+   * A identidade mora na conexão: o servidor só sabe de quem é a carteira
+   * depois do `identify`. Quem abre a loja direto também precisa se
+   * identificar, e de novo a cada reconexão.
+   */
   useEffect(() => {
     if (!profile?.id) return;
 
     const socket = getSocket();
-    const fetchWallet = () =>
-      socket.emit("fetchWallet", { profileId: profile.id }, (res) => setWallet(res));
+    const identifyAndFetch = () => {
+      socket.emit("identify", { profile }, () => {
+        socket.emit("fetchWallet", (res) => setWallet(res));
+      });
+    };
 
-    fetchWallet();
-    socket.on("connect", fetchWallet);
+    identifyAndFetch();
+    socket.on("connect", identifyAndFetch);
     return () => {
-      socket.off("connect", fetchWallet);
+      socket.off("connect", identifyAndFetch);
     };
   }, [profile?.id]);
 
@@ -72,7 +80,7 @@ export default function ShopPage() {
     setBusy(item.id);
     setMessage(null);
 
-    getSocket().emit("buyItem", { profileId: profile.id, itemId: item.id }, (res) => {
+    getSocket().emit("buyItem", { itemId: item.id }, (res) => {
       setBusy(null);
       if (res.ok) {
         setWallet({ coins: res.coins, items: res.items });

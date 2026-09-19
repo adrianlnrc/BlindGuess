@@ -59,9 +59,9 @@ export default function HomePage() {
 
         socket.emit("fetchStats", { profileId: res.profile.id }, (r) => setStats(r.stats));
 
-        socket.emit("fetchWallet", { profileId: res.profile.id }, (w) => setWallet(w));
+        socket.emit("fetchWallet", (w) => setWallet(w));
 
-        socket.emit("fetchDaily", { profileId: res.profile.id }, (r) => {
+        socket.emit("fetchDaily", (r) => {
           if (r.ok) setDaily(r.daily);
           else setDailyError(r.error);
         });

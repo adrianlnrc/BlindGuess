@@ -73,6 +73,26 @@ function push(socket: GameSocket): void {
   if (state) socket.emit("state", state);
 }
 
+/**
+ * Eventos que só levam o ack. Uma aba aberta antes desta mudança ainda manda o
+ * payload com `profileId` na frente; o payload é descartado (a identidade vem
+ * da conexão) e o ack é achado entre os argumentos, para a aba velha receber
+ * resposta em vez de ficar esperando para sempre.
+ */
+type SoAck = "fetchWallet" | "fetchFriends" | "fetchDaily";
+
+function ackOnly<E extends SoAck>(
+  handler: (ack: Parameters<ClientToServerEvents[E]>[0]) => void,
+): ClientToServerEvents[E] {
+  return ((...args: unknown[]) => {
+    const ack = args.find((arg) => typeof arg === "function");
+    if (ack) handler(ack as Parameters<ClientToServerEvents[E]>[0]);
+  }) as ClientToServerEvents[E];
+}
+
+/** Resposta para quem pede algo pessoal antes de dizer quem é. */
+const NAO_IDENTIFICADO = "Identifique-se antes de usar este recurso.";
+
 /** Erro numa ação que responde por ack, sem derrubar a conexão. */
 function fail(err: unknown, label: string, ack: (res: { ok: false; error: string }) => void): void {
   console.error(`[${label}]`, err);
@@ -102,6 +122,13 @@ async function resolveProfile(
   if (!clean) return null;
 
   if (!user) {
+    // A identidade do convidado é fixada na primeira identificação desta
+    // conexão. Se depois chegar outro id — o `profileId` de alguém copiado do
+    // ranking, por exemplo — ele é ignorado: a conexão continua sendo quem já
+    // era, e apelido e avatar entram no perfil dela.
+    const pinned = socket.data.profileId;
+    if (pinned && pinned !== clean.id) clean = { ...clean, id: pinned };
+
     if (hasDatabase()) {
       clean = await enforceOwnership(clean);
       await saveProfile(clean).catch((err) => console.error("[profile]", err));
@@ -159,16 +186,26 @@ async function enforceOwnership(profile: PlayerProfile): Promise<PlayerProfile> 
   return { ...profile, avatar };
 }
 
-/** O id canônico de quem está falando, sem exigir um perfil completo. */
-async function resolvePlayerId(socket: GameSocket, fallback: unknown): Promise<string> {
-  const given = String(fallback ?? "").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 40);
-  if (!hasDatabase()) return given;
+/**
+ * O id canônico de quem está falando, sem exigir um perfil completo.
+ *
+ * A identidade mora na conexão, nunca no payload: logado, vem da sessão no
+ * banco; convidado, vem do `socket.data.profileId` fixado no `identify`. Se o
+ * cliente ainda não se identificou, não há ninguém — devolve null e cada
+ * handler degrada de forma suave. Aceitar um id vindo do cliente deixaria
+ * qualquer pessoa agir no lugar de outra, já que o `profileId` aparece no
+ * ranking, nos desafios e na lista de amigos.
+ */
+async function resolvePlayerId(socket: GameSocket): Promise<string | null> {
+  if (hasDatabase()) {
+    const user = await userFromCookieHeader(socket.handshake.headers.cookie);
+    if (user) {
+      const owned = await getPlayerForUser(user.id);
+      if (owned) return owned.id;
+    }
+  }
 
-  const user = await userFromCookieHeader(socket.handshake.headers.cookie);
-  if (!user) return given;
-
-  const owned = await getPlayerForUser(user.id);
-  return owned?.id ?? given;
+  return socket.data.profileId ?? null;
 }
 
 /**
@@ -232,7 +269,7 @@ io.on("connection", (socket: GameSocket) => {
         if (!resolved) return ack({ ok: false, error: "Escolha um apelido." });
 
         const { code, playerId } = rooms.createRoom(resolved.profile, socket.id);
-        socket.data = { playerId, roomCode: code };
+        socket.data = { ...socket.data, playerId, roomCode: code };
         socket.join(code);
         ack({ ok: true, code, playerId });
         push(socket);
@@ -246,7 +283,7 @@ io.on("connection", (socket: GameSocket) => {
         if (!resolved) return ack({ ok: false, error: "Escolha um apelido." });
 
         const { code, playerId } = rooms.createSolo(resolved.profile, socket.id, settings);
-        socket.data = { playerId, roomCode: code };
+        socket.data = { ...socket.data, playerId, roomCode: code };
         socket.join(code);
         ack({ ok: true, code, playerId });
         push(socket);
@@ -260,7 +297,7 @@ io.on("connection", (socket: GameSocket) => {
         if (!resolved) return ack({ ok: false, error: "Escolha um apelido." });
 
         const { code, playerId } = rooms.createDuel(resolved.profile, socket.id, settings);
-        socket.data = { playerId, roomCode: code };
+        socket.data = { ...socket.data, playerId, roomCode: code };
         socket.join(code);
         ack({ ok: true, code, playerId });
         push(socket);
@@ -276,7 +313,7 @@ io.on("connection", (socket: GameSocket) => {
         const result = await rooms.createChallengeRoom(resolved.profile, socket.id, settings);
         if (!result.ok) return ack(result);
 
-        socket.data = { playerId: result.playerId, roomCode: result.code };
+        socket.data = { ...socket.data, playerId: result.playerId, roomCode: result.code };
         socket.join(result.code);
         ack(result);
         push(socket);
@@ -296,7 +333,7 @@ io.on("connection", (socket: GameSocket) => {
         );
         if (!result.ok) return ack(result);
 
-        socket.data = { playerId: result.playerId, roomCode: result.code };
+        socket.data = { ...socket.data, playerId: result.playerId, roomCode: result.code };
         socket.join(result.code);
         ack(result);
         push(socket);
@@ -313,7 +350,7 @@ io.on("connection", (socket: GameSocket) => {
         const result = rooms.joinRoom(roomCode, resolved.profile, socket.id, playerId);
         if (!result.ok) return ack(result);
 
-        socket.data = { playerId: result.playerId, roomCode };
+        socket.data = { ...socket.data, playerId: result.playerId, roomCode };
         socket.join(roomCode);
         ack({ ok: true, code: roomCode, playerId: result.playerId });
 
@@ -344,23 +381,27 @@ io.on("connection", (socket: GameSocket) => {
       });
   });
 
-  socket.on("fetchFriends", ({ profileId }, ack) => {
+  socket.on("fetchFriends", ackOnly<"fetchFriends">((ack) => {
     if (!hasDatabase()) return ack({ ok: false, error: "Amigos precisam do banco configurado." });
 
-    resolvePlayerId(socket, profileId)
+    resolvePlayerId(socket)
       .then(async (playerId) => {
+        if (!playerId) return ack({ ok: false, error: NAO_IDENTIFICADO });
+
         const myCode = await getFriendCode(playerId);
         const friends = await getFriends(playerId, isOnline);
         ack({ ok: true, myCode, friends });
       })
       .catch((err) => fail(err, "fetchFriends", ack));
-  });
+  }));
 
-  socket.on("addFriend", ({ profileId, code }, ack) => {
+  socket.on("addFriend", ({ code }, ack) => {
     if (!hasDatabase()) return ack({ ok: false, error: "Amigos precisam do banco configurado." });
 
-    resolvePlayerId(socket, profileId)
+    resolvePlayerId(socket)
       .then(async (playerId) => {
+        if (!playerId) return ack({ ok: false, error: NAO_IDENTIFICADO });
+
         const result = await addFriendByCode(playerId, String(code ?? ""));
         if (!result.ok) return ack(result);
         ack({ ok: true, friends: await getFriends(playerId, isOnline) });
@@ -368,34 +409,39 @@ io.on("connection", (socket: GameSocket) => {
       .catch((err) => fail(err, "addFriend", ack));
   });
 
-  socket.on("removeFriend", ({ profileId, friendId }, ack) => {
+  socket.on("removeFriend", ({ friendId }, ack) => {
     if (!hasDatabase()) return ack({ ok: false, error: "Amigos precisam do banco configurado." });
 
-    resolvePlayerId(socket, profileId)
+    resolvePlayerId(socket)
       .then(async (playerId) => {
+        if (!playerId) return ack({ ok: false, error: NAO_IDENTIFICADO });
+
         await removeFriend(playerId, String(friendId ?? ""));
         ack({ ok: true, friends: await getFriends(playerId, isOnline) });
       })
       .catch((err) => fail(err, "removeFriend", ack));
   });
 
-  socket.on("fetchWallet", ({ profileId }, ack) => {
+  socket.on("fetchWallet", ackOnly<"fetchWallet">((ack) => {
     if (!hasDatabase()) return ack({ coins: 0, items: [] });
 
-    resolvePlayerId(socket, profileId)
-      .then((playerId) => getWallet(playerId))
+    resolvePlayerId(socket)
+      // Sem identificação não há carteira para mostrar: devolve vazia.
+      .then((playerId) => (playerId ? getWallet(playerId) : { coins: 0, items: [] }))
       .then((wallet) => ack(wallet))
       .catch((err) => {
         console.error("[fetchWallet]", err);
         ack({ coins: 0, items: [] });
       });
-  });
+  }));
 
-  socket.on("buyItem", ({ profileId, itemId }, ack) => {
+  socket.on("buyItem", ({ itemId }, ack) => {
     if (!hasDatabase()) return ack({ ok: false, error: "A loja precisa do banco configurado." });
 
-    resolvePlayerId(socket, profileId)
-      .then((playerId) => buyItem(playerId, String(itemId ?? "")))
+    resolvePlayerId(socket)
+      .then((playerId) =>
+        playerId ? buyItem(playerId, String(itemId ?? "")) : { ok: false as const, error: NAO_IDENTIFICADO },
+      )
       .then((res) => {
         if (!res.ok) return ack(res);
         ack({ ok: true, coins: res.wallet.coins, items: res.wallet.items });
@@ -403,7 +449,7 @@ io.on("connection", (socket: GameSocket) => {
       .catch((err) => fail(err, "buyItem", ack));
   });
 
-  socket.on("fetchDaily", ({ profileId }, ack) => {
+  socket.on("fetchDaily", ackOnly<"fetchDaily">((ack) => {
     if (!hasDatabase()) {
       return ack({ ok: false, error: "O desafio do dia precisa do banco configurado." });
     }
@@ -421,8 +467,10 @@ io.on("connection", (socket: GameSocket) => {
         const summary = await getChallengeSummary(daily.code);
         if (!summary) return ack({ ok: false, error: "Desafio de hoje indisponível." });
 
-        const playerId = await resolvePlayerId(socket, profileId);
-        const mine = summary.entries.find((entry) => entry.profileId === playerId);
+        const playerId = await resolvePlayerId(socket);
+        const mine = playerId
+          ? summary.entries.find((entry) => entry.profileId === playerId)
+          : undefined;
 
         ack({
           ok: true,
@@ -438,7 +486,7 @@ io.on("connection", (socket: GameSocket) => {
         });
       })
       .catch((err) => fail(err, "fetchDaily", ack));
-  });
+  }));
 
   socket.on("playDaily", ({ profile }, ack) => {
     resolveProfile(socket, profile)
@@ -453,7 +501,7 @@ io.on("connection", (socket: GameSocket) => {
         const result = await rooms.playChallenge(resolved.profile, socket.id, daily.code);
         if (!result.ok) return ack(result);
 
-        socket.data = { playerId: result.playerId, roomCode: result.code };
+        socket.data = { ...socket.data, playerId: result.playerId, roomCode: result.code };
         socket.join(result.code);
         ack(result);
         push(socket);
@@ -506,7 +554,8 @@ io.on("connection", (socket: GameSocket) => {
     if (roomCode && playerId) {
       rooms.leaveRoom(roomCode, playerId);
       socket.leave(roomCode);
-      socket.data = {};
+      // Sai da sala mas continua sendo a mesma pessoa nesta conexão.
+      socket.data = { profileId: socket.data.profileId };
     }
   });
 

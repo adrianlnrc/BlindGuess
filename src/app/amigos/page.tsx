@@ -20,10 +20,7 @@ export default function FriendsPage() {
   useEffect(() => setProfile(loadProfile()), []);
 
   const refresh = useCallback(() => {
-    const current = loadProfile();
-    if (!current.id) return;
-
-    getSocket().emit("fetchFriends", { profileId: current.id }, (res) => {
+    getSocket().emit("fetchFriends", (res) => {
       if (res.ok) {
         setMyCode(res.myCode);
         setFriends(res.friends);
@@ -34,20 +31,32 @@ export default function FriendsPage() {
     });
   }, []);
 
+  /**
+   * O servidor só liga esta conexão ao perfil depois do `identify`, então quem
+   * abre a página de amigos direto precisa se identificar antes de pedir a
+   * lista — e de novo a cada reconexão.
+   */
+  const identifyAndRefresh = useCallback(() => {
+    const current = loadProfile();
+    if (!current.id) return;
+
+    getSocket().emit("identify", { profile: current }, () => refresh());
+  }, [refresh]);
+
   useEffect(() => {
     if (!profile?.id) return;
 
     const socket = getSocket();
-    refresh();
-    socket.on("connect", refresh);
+    identifyAndRefresh();
+    socket.on("connect", identifyAndRefresh);
     // A presença muda sem aviso, então recarregamos de tempos em tempos.
     const id = setInterval(refresh, 20_000);
 
     return () => {
-      socket.off("connect", refresh);
+      socket.off("connect", identifyAndRefresh);
       clearInterval(id);
     };
-  }, [profile?.id, refresh]);
+  }, [profile?.id, refresh, identifyAndRefresh]);
 
   function add(event: React.FormEvent) {
     event.preventDefault();
@@ -57,7 +66,7 @@ export default function FriendsPage() {
     setBusy(true);
     setMessage(null);
 
-    getSocket().emit("addFriend", { profileId: profile.id, code: wanted }, (res) => {
+    getSocket().emit("addFriend", { code: wanted }, (res) => {
       setBusy(false);
       if (res.ok) {
         setFriends(res.friends);
@@ -72,7 +81,7 @@ export default function FriendsPage() {
   function remove(friend: Friend) {
     if (!profile) return;
 
-    getSocket().emit("removeFriend", { profileId: profile.id, friendId: friend.profileId }, (res) => {
+    getSocket().emit("removeFriend", { friendId: friend.profileId }, (res) => {
       if (res.ok) setFriends(res.friends);
       else setMessage(res.error);
     });
