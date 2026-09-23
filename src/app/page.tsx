@@ -8,7 +8,9 @@ import Avatar from "@/components/Avatar";
 import AvatarEditor from "@/components/AvatarEditor";
 import DailyCard from "@/components/DailyCard";
 import LevelBadge from "@/components/LevelBadge";
+import { AvisosDeGanho, useContagem, useGanhoDeProgresso } from "@/components/ProgressoFeedback";
 import StreakBadge from "@/components/StreakBadge";
+import Mundo3D from "@/components/three/Mundo3D";
 import { loadProfile, saveProfileLocal } from "@/lib/profile";
 import { getSocket, rememberPlayer } from "@/lib/socket";
 import type {
@@ -28,7 +30,9 @@ export default function HomePage() {
   const [daily, setDaily] = useState<DailyInfo | null>(null);
   const [dailyError, setDailyError] = useState<string | null>(null);
   const [online, setOnline] = useState<number | null>(null);
-  const [wallet, setWallet] = useState<{ coins: number; items: string[] }>({ coins: 0, items: [] });
+  // `null` enquanto a carteira não chegou: só assim dá para diferenciar "ainda
+  // não sei" de "zero moedas" na hora de comparar com a última visita.
+  const [carteira, setCarteira] = useState<{ coins: number; items: string[] } | null>(null);
   const [editing, setEditing] = useState(false);
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState<Mode | "join" | null>(null);
@@ -59,7 +63,7 @@ export default function HomePage() {
 
         socket.emit("fetchStats", { profileId: res.profile.id }, (r) => setStats(r.stats));
 
-        socket.emit("fetchWallet", (w) => setWallet(w));
+        socket.emit("fetchWallet", (w) => setCarteira(w));
 
         socket.emit("fetchDaily", (r) => {
           if (r.ok) setDaily(r.daily);
@@ -99,6 +103,18 @@ export default function HomePage() {
       });
     },
     [],
+  );
+
+  /**
+   * O que foi ganho desde a última visita à home: quem volta de uma partida
+   * chega com XP e moedas novos, e isso vira animação em vez de um número que
+   * simplesmente já está diferente. As regras (`lib/level.ts`, `lib/shop.ts`)
+   * não mudam — só o jeito de mostrar.
+   */
+  const ganho = useGanhoDeProgresso(stats?.totalScore ?? null, carteira?.coins ?? null);
+  const moedasMostradas = useContagem(
+    carteira?.coins ?? 0,
+    ganho && ganho.moedas > 0 ? ganho.moedasAntes : null,
   );
 
   if (!profile) {
@@ -173,55 +189,82 @@ export default function HomePage() {
 
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-5xl flex-col gap-10 px-6 py-12">
-      <header className="flex flex-wrap items-start justify-between gap-6">
-        <div className="space-y-3">
-          <span className="inline-flex items-center gap-2 rounded-full border border-ink-600 bg-ink-900/60 px-3 py-1 text-xs font-medium tracking-widest text-beam-400 uppercase">
-            <span className="size-1.5 animate-pulse rounded-full bg-beam-400" />
-            {online !== null
-              ? `${online} ${online === 1 ? "pessoa jogando" : "pessoas jogando"}`
-              : "sozinho, com amigos ou por desafio"}
-          </span>
-          <h1 className="text-5xl font-black tracking-tight sm:text-6xl">
-            Blind<span className="text-beam-400">Guess</span>
-          </h1>
-          <p className="max-w-lg text-lg text-mist-300">
-            Você cai num ponto aleatório do planeta sem saber onde está. Leia as placas, a
-            vegetação, o lado da pista — e crave o palpite antes do tempo acabar.
-          </p>
-        </div>
+      <header className="space-y-6">
+        {/* Palco: o texto e a cena em colunas separadas, nunca um sobre o
+            outro. A altura do palco é fixa, então a interface já nasce no lugar
+            certo e nada pula quando o canvas chega — ou quando ele não chega. */}
+        <section className="panel relative overflow-hidden rounded-3xl">
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0"
+            style={{
+              background:
+                "radial-gradient(58% 70% at 78% 62%, rgba(124, 92, 240, 0.22), transparent 70%)",
+            }}
+          />
 
-        <div className="flex flex-col items-end gap-3">
+          <div className="relative grid gap-6 p-6 sm:p-8 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
+            <div className="order-2 space-y-3 lg:order-1">
+              <span className="inline-flex items-center gap-2 rounded-full border border-ink-600 bg-ink-900/60 px-3 py-1 text-xs font-medium tracking-widest text-beam-400 uppercase">
+                <span className="size-1.5 animate-pulse rounded-full bg-beam-400" />
+                {online !== null
+                  ? `${online} ${online === 1 ? "pessoa jogando" : "pessoas jogando"}`
+                  : "sozinho, com amigos ou por desafio"}
+              </span>
+              <h1 className="text-5xl font-black tracking-tight sm:text-6xl">
+                Blind<span className="text-beam-400">Guess</span>
+              </h1>
+              <p className="max-w-lg text-lg text-mist-300">
+                Você cai num ponto aleatório do planeta sem saber onde está. Leia as placas, a
+                vegetação, o lado da pista — e crave o palpite antes do tempo acabar.
+              </p>
+            </div>
+
+            <div className="relative order-1 h-52 w-full sm:h-64 lg:order-2 lg:h-80">
+              <Mundo3D
+                avatar={profile.avatar}
+                celebra={ganho?.subiuDeNivel ? ganho.id : 0}
+                className="absolute inset-0"
+              />
+              <AvisosDeGanho ganho={ganho} className="absolute top-0 right-0" />
+            </div>
+          </div>
+        </section>
+
+        <div className="flex flex-wrap items-start justify-between gap-4">
           <StreakBadge streak={stats?.streak ?? null} />
 
-          <Link
-            href="/loja"
-            className="flex items-center gap-2 rounded-lg border border-ink-600 px-3 py-1.5 text-sm font-semibold transition hover:border-flare-400 hover:text-flare-400"
-          >
-            <span aria-hidden>🪙</span>
-            <span className="num">{wallet.coins.toLocaleString("pt-BR")}</span>
-          </Link>
-
-          {account?.authenticated ? (
-            <div className="flex items-center gap-3 text-sm">
-              <span className="text-mist-300">
-                {account.email ? account.email : "conta conectada"}
-              </span>
-              <button
-                type="button"
-                onClick={() => signOut({ callbackUrl: "/" })}
-                className="rounded-lg border border-ink-600 px-3 py-1.5 font-medium transition hover:border-beam-500 hover:text-beam-400"
-              >
-                Sair
-              </button>
-            </div>
-          ) : (
+          <div className="flex flex-col items-end gap-3">
             <Link
-              href="/entrar"
-              className="rounded-lg border border-ink-600 px-3 py-1.5 text-sm font-medium transition hover:border-beam-500 hover:text-beam-400"
+              href="/loja"
+              className="flex items-center gap-2 rounded-lg border border-ink-600 px-3 py-1.5 text-sm font-semibold transition hover:border-flare-400 hover:text-flare-400"
             >
-              Entrar e salvar meu progresso
+              <span aria-hidden>🪙</span>
+              <span className="num">{moedasMostradas.toLocaleString("pt-BR")}</span>
             </Link>
-          )}
+
+            {account?.authenticated ? (
+              <div className="flex items-center gap-3 text-sm">
+                <span className="text-mist-300">
+                  {account.email ? account.email : "conta conectada"}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => signOut({ callbackUrl: "/" })}
+                  className="rounded-lg border border-ink-600 px-3 py-1.5 font-medium transition hover:border-beam-500 hover:text-beam-400"
+                >
+                  Sair
+                </button>
+              </div>
+            ) : (
+              <Link
+                href="/entrar"
+                className="rounded-lg border border-ink-600 px-3 py-1.5 text-sm font-medium transition hover:border-beam-500 hover:text-beam-400"
+              >
+                Entrar e salvar meu progresso
+              </Link>
+            )}
+          </div>
         </div>
       </header>
 
@@ -230,7 +273,13 @@ export default function HomePage() {
         <div className="flex flex-wrap items-center gap-4">
           <Avatar avatar={profile.avatar} size={64} className="rounded-xl" />
 
-          {stats && <LevelBadge xp={stats.totalScore} />}
+          {stats && (
+            <LevelBadge
+              xp={stats.totalScore}
+              xpAnterior={ganho && ganho.xp > 0 ? ganho.xpAntes : null}
+              celebrar={ganho?.subiuDeNivel ?? false}
+            />
+          )}
 
           <div className="min-w-48 flex-1">
             <label htmlFor="nickname" className="text-xs tracking-widest text-mist-300 uppercase">
@@ -257,7 +306,7 @@ export default function HomePage() {
 
         {editing && (
           <div className="mt-6 border-t border-ink-700 pt-6">
-            <AvatarEditor avatar={profile.avatar} owned={wallet.items} onChange={updateAvatar} />
+            <AvatarEditor avatar={profile.avatar} owned={carteira?.items ?? []} onChange={updateAvatar} />
           </div>
         )}
 
