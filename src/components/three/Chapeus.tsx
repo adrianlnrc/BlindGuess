@@ -99,14 +99,16 @@ function MeiaAba({
 function Bone({ mats }: { mats: Materiais }) {
   return (
     <group>
-      <Copa raio={R_CABECA * 1.04} abertura={Math.PI * 0.45} material={mats.detalhe} y={0.01} />
+      <Copa raio={R_CABECA * 1.05} abertura={Math.PI * 0.48} material={mats.detalhe} y={0.01} />
+      {/* aba estreita e quase horizontal: sai da copa e para acima dos olhos */}
       <MeiaAba
-        raio={R_CABECA * 0.96}
-        espessura={0.06}
+        raio={R_CABECA * 0.62}
+        espessura={0.055}
         material={mats.detalheEscuro}
-        y={Y_TESTA}
-        z={0.08}
-        escalaZ={1.2}
+        y={0.22}
+        z={0.06}
+        inclinacao={0.1}
+        escalaZ={2.1}
       />
       <mesh position={[0, R_CABECA * 0.98, 0]} material={mats.detalheEscuro}>
         <sphereGeometry args={[0.05, 10, 8]} />
@@ -191,38 +193,69 @@ function Bucket({ mats }: { mats: Materiais }) {
 function Viseira({ mats }: { mats: Materiais }) {
   return (
     <group>
-      <mesh position={[0, Y_TESTA + 0.07, 0]} material={mats.detalhe}>
-        <cylinderGeometry args={[R_CABECA * 1.03, R_CABECA * 1.03, 0.15, 24, 1, true]} />
+      {/* aro aberto: o alto da cabeça fica à mostra, essa é a graça da viseira */}
+      <mesh position={[0, Y_TESTA + 0.06, 0]} material={mats.detalhe}>
+        <cylinderGeometry args={[R_CABECA * 1.02, R_CABECA * 1.05, 0.14, 24, 1, true]} />
       </mesh>
       <MeiaAba
-        raio={R_CABECA * 1.12}
-        espessura={0.055}
+        raio={R_CABECA * 0.9}
+        espessura={0.05}
         material={mats.detalheEscuro}
-        y={Y_TESTA + 0.02}
-        z={0.05}
-        inclinacao={0.18}
-        escalaZ={1.05}
+        y={Y_TESTA + 0.04}
+        z={0.08}
+        inclinacao={0.12}
+        escalaZ={1.4}
       />
     </group>
   );
 }
 
-/** Capacete: casco fechado, crista central na cor da roupa e aro na borda. */
+/**
+ * Capacete: casco fechado que desce até a altura da orelha atrás e dos lados,
+ * com abertura para o rosto na frente — silhueta bem mais envolvente que a do
+ * boné. Crista central na cor da roupa e aro na borda.
+ */
 function Capacete({ mats }: { mats: Materiais }) {
-  const raio = R_CABECA * 1.09;
-  const abertura = Math.PI * 0.41;
-  const yAro = raio * Math.cos(abertura);
+  const raio = R_CABECA * 1.1;
+  const cascoAte = Math.PI * 0.62; // atrás e dos lados: passa da orelha
+  const frenteAte = Math.PI * 0.4; // na frente: para acima dos olhos
+  const yAro = raio * Math.cos(cascoAte);
+  const yAroFrente = raio * Math.cos(frenteAte);
+
   return (
     <group>
-      <Copa raio={raio} abertura={abertura} material={mats.detalhe} />
+      {/* casco: três quartos da volta, descendo fundo */}
+      <mesh material={mats.detalhe}>
+        <sphereGeometry
+          args={[raio, 26, 16, Math.PI * 0.8, Math.PI * 1.4, 0, cascoAte]}
+        />
+      </mesh>
+      {/* testeira: o quarto da frente para na altura da sobrancelha */}
+      <mesh material={mats.detalhe}>
+        <sphereGeometry
+          args={[raio, 16, 12, Math.PI * 0.2, Math.PI * 0.6, 0, frenteAte]}
+        />
+      </mesh>
+
+      {/* crista, da testa à nuca */}
       <group rotation={[0, Math.PI / 2, 0]}>
-        <mesh rotation={[0, 0, Math.PI * 0.22]} scale={[1, 1.03, 1]} material={mats.roupa}>
-          <torusGeometry args={[raio * 0.99, 0.08, 8, 22, Math.PI * 0.58]} />
+        <mesh rotation={[0, 0, Math.PI * 0.2]} scale={[1, 1.02, 1]} material={mats.roupa}>
+          <torusGeometry args={[raio * 1.01, 0.1, 8, 22, Math.PI * 0.62]} />
         </mesh>
       </group>
-      <mesh position={[0, yAro, 0]} rotation={[Math.PI / 2, 0, 0]} material={mats.detalheEscuro}>
-        <torusGeometry args={[raio * 0.92, 0.055, 8, 24]} />
-      </mesh>
+
+      {/* aro da borda funda, acompanhando os três quartos do casco */}
+      <group position={[0, yAro, 0]} rotation={[Math.PI / 2, 0, 0]}>
+        <mesh rotation={[0, 0, Math.PI * 0.8]} material={mats.detalheEscuro}>
+          <torusGeometry args={[raio * Math.sin(cascoAte), 0.05, 6, 26, Math.PI * 1.4]} />
+        </mesh>
+      </group>
+      {/* aro da testeira */}
+      <group position={[0, yAroFrente, 0]} rotation={[Math.PI / 2, 0, 0]}>
+        <mesh rotation={[0, 0, Math.PI * 0.2]} material={mats.detalheEscuro}>
+          <torusGeometry args={[raio * Math.sin(frenteAte), 0.05, 6, 18, Math.PI * 0.6]} />
+        </mesh>
+      </group>
     </group>
   );
 }

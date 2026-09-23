@@ -84,17 +84,27 @@ export default function Personagem({
           <cylinderGeometry args={[0.15, 0.17, 0.16, 14]} />
         </mesh>
 
-        {/* braços: cápsula na cor da roupa e mão redonda */}
+        {/* braços: giram no ombro, e ombro, braço e mão se encostam sem vão */}
         {[
           { lado: -1, ref: bracoEsq },
           { lado: 1, ref: bracoDir },
         ].map(({ lado, ref }) => (
-          <group key={lado} ref={ref} position={[lado * 0.42, 1.22, 0]}>
-            <mesh position={[lado * 0.03, -0.2, 0]} rotation={[0, 0, lado * -0.14]} material={mats.roupa}>
-              <capsuleGeometry args={[0.105, 0.3, 4, 12]} />
+          <group
+            key={lado}
+            ref={ref}
+            position={[lado * 0.32, 1.27, 0]}
+            rotation={[0, 0, lado * 0.3]}
+          >
+            {/* bola do ombro, enfiada no tronco para fechar a junta */}
+            <mesh position={[0, -0.02, 0]} material={mats.roupa}>
+              <sphereGeometry args={[0.135, 14, 10]} />
             </mesh>
-            <mesh position={[lado * 0.09, -0.45, 0]} material={mats.pele}>
-              <sphereGeometry args={[0.125, 14, 10]} />
+            <mesh position={[0, -0.24, 0]} material={mats.roupa}>
+              <capsuleGeometry args={[0.105, 0.34, 4, 12]} />
+            </mesh>
+            {/* a mão encaixa na ponta da cápsula, com sobreposição */}
+            <mesh position={[0, -0.545, 0]} material={mats.pele}>
+              <sphereGeometry args={[0.13, 14, 10]} />
             </mesh>
           </group>
         ))}
