@@ -102,13 +102,13 @@ function Bone({ mats }: { mats: Materiais }) {
       <Copa raio={R_CABECA * 1.05} abertura={Math.PI * 0.48} material={mats.detalhe} y={0.01} />
       {/* aba estreita e quase horizontal: sai da copa e para acima dos olhos */}
       <MeiaAba
-        raio={R_CABECA * 0.62}
-        espessura={0.055}
+        raio={R_CABECA * 0.78}
+        espessura={0.07}
         material={mats.detalheEscuro}
-        y={0.22}
-        z={0.06}
-        inclinacao={0.1}
-        escalaZ={2.1}
+        y={0.26}
+        z={0.02}
+        inclinacao={0.14}
+        escalaZ={1.7}
       />
       <mesh position={[0, R_CABECA * 0.98, 0]} material={mats.detalheEscuro}>
         <sphereGeometry args={[0.05, 10, 8]} />
