@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import Avatar from "@/components/Avatar";
 import PersonagemGiravel from "@/components/PersonagemGiravel";
+import type { Enquadramento } from "@/components/enquadramento";
 import { NOME_DA_SECAO, faltam, moedas, vestir } from "@/components/cosmeticos";
 import { loadProfile, saveProfileLocal } from "@/lib/profile";
 import { itemById, itemsOfKind, SHOP_ITEMS, type ShopItem } from "@/lib/shop";
@@ -109,6 +110,9 @@ export default function ShopPage() {
   }
 
   const noProvador = provando ? preview(provando) : profile.avatar;
+  /** Chapéu e rosto pedem a câmera perto; roupa e detalhe pedem o corpo inteiro. */
+  const enquadramento: Enquadramento =
+    provando?.kind === "hat" || provando?.kind === "face" ? "rosto" : "corpo";
   const tenhoProvado = provando ? wallet.items.includes(provando.id) : false;
   const faltaProvado = provando ? faltam(provando.price, wallet.coins) : 0;
 
@@ -142,7 +146,12 @@ export default function ShopPage() {
 
       {/* Provador: a compra como decisão visual — o item no seu personagem, antes de gastar. */}
       <section className="panel grid gap-5 rounded-2xl p-5 sm:grid-cols-[minmax(0,18rem)_1fr] sm:items-center">
-        <PersonagemGiravel avatar={noProvador} altura={280} tamanhoReserva={190}>
+        <PersonagemGiravel
+          avatar={noProvador}
+          altura={280}
+          tamanhoReserva={190}
+          enquadramento={enquadramento}
+        >
           {provando && !tenhoProvado && (
             <span className="pointer-events-none absolute top-3 left-3 rounded-lg border border-flare-400/50 bg-ink-950/85 px-2.5 py-1 text-xs font-semibold tracking-wide text-flare-400 uppercase">
               prévia

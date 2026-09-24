@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import PersonagemGiravel from "./PersonagemGiravel";
+import type { Enquadramento } from "./enquadramento";
 import { GRATIS, moedas, vestir } from "./cosmeticos";
 import { SKIN_TONES } from "@/lib/profile";
 import { itemsOfKind, type ShopItem } from "@/lib/shop";
@@ -36,6 +37,14 @@ type Escolha = {
 export default function AvatarEditor({ avatar, owned, onChange }: Props) {
   /** Item bloqueado em prova. Vive aqui e morre aqui — nunca vai para o perfil. */
   const [prova, setProva] = useState<ShopItem | null>(null);
+  /**
+   * O eixo mexido por último manda no enquadramento: chapéu e rosto — onde mora
+   * a maior parte da loja — pedem a câmera perto; cor de roupa e de detalhe
+   * pedem o corpo inteiro.
+   */
+  const [eixo, setEixo] = useState<ShopItem["kind"] | "skin">("hat");
+  const enquadramento: Enquadramento =
+    (prova?.kind ?? eixo) === "hat" || (prova?.kind ?? eixo) === "face" ? "rosto" : "corpo";
 
   const tenho = (item: ShopItem) => owned.includes(item.id);
   const mostrado = prova ? vestir(avatar, prova) : avatar;
@@ -54,6 +63,7 @@ export default function AvatarEditor({ avatar, owned, onChange }: Props) {
 
   /** Escolher: o que é meu veste de verdade; o que é bloqueado só entra na prévia. */
   function escolher(kind: ShopItem["kind"], escolha: Escolha) {
+    setEixo(kind);
     if (escolha.item && !escolha.tenho) {
       setProva(escolha.item);
       return;
@@ -81,7 +91,12 @@ export default function AvatarEditor({ avatar, owned, onChange }: Props) {
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,19rem)_1fr]">
       <div className="flex flex-col gap-3 lg:sticky lg:top-6 lg:self-start">
-        <PersonagemGiravel avatar={mostrado} altura={300} tamanhoReserva={200}>
+        <PersonagemGiravel
+          avatar={mostrado}
+          altura={300}
+          tamanhoReserva={200}
+          enquadramento={enquadramento}
+        >
           {prova && (
             <span className="pointer-events-none absolute top-3 left-3 rounded-lg border border-flare-400/50 bg-ink-950/85 px-2.5 py-1 text-xs font-semibold tracking-wide text-flare-400 uppercase">
               prévia
@@ -147,6 +162,7 @@ export default function AvatarEditor({ avatar, owned, onChange }: Props) {
           estaSelecionado={(cor) => !prova && avatar.skin === cor}
           onPick={(cor) => {
             setProva(null);
+            setEixo("skin");
             onChange({ skin: cor });
           }}
         />

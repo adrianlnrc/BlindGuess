@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Personagem3D } from "@/components/three";
+import PersonagemPalco from "./PersonagemPalco";
+import type { Enquadramento } from "./enquadramento";
 import { useAbaVisivel, usePrefereMenosMovimento } from "@/components/three/preferencias";
 import type { Avatar as AvatarType } from "@/lib/types";
 
@@ -16,6 +17,8 @@ type Props = {
   children?: React.ReactNode;
   /** Desliga o giro lento de vitrine. */
   girarSozinho?: boolean;
+  /** "rosto" chega perto quando o que está em prova é chapéu ou rosto. */
+  enquadramento?: Enquadramento;
 };
 
 /** Quanto o personagem gira por pixel arrastado. */
@@ -47,6 +50,7 @@ export default function PersonagemGiravel({
   className = "",
   children,
   girarSozinho = true,
+  enquadramento = "corpo",
 }: Props) {
   const [giro, setGiro] = useState(0);
   const [tocado, setTocado] = useState(false);
@@ -113,9 +117,10 @@ export default function PersonagemGiravel({
         style={{ height: altura, touchAction: "pan-y" }}
         className="relative w-full cursor-grab overflow-hidden rounded-2xl border border-ink-700 bg-ink-950/60 select-none active:cursor-grabbing focus-visible:border-beam-500 focus-visible:outline-none"
       >
-        <Personagem3D
+        <PersonagemPalco
           avatar={avatar}
           rotationY={giro}
+          enquadramento={enquadramento}
           tamanhoReserva={tamanhoReserva ?? Math.min(220, Math.round(altura * 0.8))}
           className="size-full"
         />
