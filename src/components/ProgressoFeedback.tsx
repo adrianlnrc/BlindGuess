@@ -144,11 +144,11 @@ export function ChipGanho({
   const reduzMovimento = usePrefereMenosMovimento();
   const [entrou, setEntrou] = useState(false);
 
-  // Entrada por transição, não por keyframe: um quadro depois de montar o selo
-  // desliza para o lugar. Com menos movimento ele já nasce no estado final.
+  // Entrada por transição, não por keyframe: o primeiro quadro pinta o selo
+  // apagado e o efeito, logo depois da pintura, liga o estado final. Com menos
+  // movimento o selo já nasce pronto e nada se move.
   useEffect(() => {
-    const quadro = requestAnimationFrame(() => setEntrou(true));
-    return () => cancelAnimationFrame(quadro);
+    setEntrou(true);
   }, []);
 
   const cores =

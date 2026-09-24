@@ -8,6 +8,7 @@ import {
   BufferAttribute,
   BufferGeometry,
   Color,
+  IcosahedronGeometry,
   MeshBasicMaterial,
   MeshStandardMaterial,
   PointsMaterial,
@@ -131,6 +132,9 @@ function Globo({ detalhe, animando, celebra }: { detalhe: number; animando: bool
   const gira = useRef<Group>(null);
 
   const pecas = useMemo(() => montaGlobo(detalhe), [detalhe]);
+  // A atmosfera tem malha própria, mais fina que a do oceano: ela é só
+  // silhueta, e faceta demais na borda vira um anel poligonal.
+  const casca = useMemo(() => new IcosahedronGeometry(1, 3), []);
 
   const materiais = useMemo(() => {
     const oceano = new MeshStandardMaterial({
@@ -158,7 +162,7 @@ function Globo({ detalhe, animando, celebra }: { detalhe: number; animando: bool
     const halo = new MeshBasicMaterial({
       color: new Color(HALO),
       transparent: true,
-      opacity: 0.16,
+      opacity: 0.13,
       side: BackSide,
       blending: AdditiveBlending,
       depthWrite: false,
@@ -171,8 +175,9 @@ function Globo({ detalhe, animando, celebra }: { detalhe: number; animando: bool
       pecas.oceano.dispose();
       pecas.terra.dispose();
       pecas.gelo.dispose();
+      casca.dispose();
     },
-    [pecas],
+    [pecas, casca],
   );
 
   useEffect(
@@ -192,7 +197,7 @@ function Globo({ detalhe, animando, celebra }: { detalhe: number; animando: bool
   return (
     <group position={[0, CENTRO_Y, 0]} rotation={[0, 0, 0.17]}>
       {/* Atmosfera: uma casca por dentro, sem escrever no depth. */}
-      <mesh geometry={pecas.oceano} material={materiais.halo} scale={RAIO * 1.14} />
+      <mesh geometry={casca} material={materiais.halo} scale={RAIO * 1.13} />
 
       <group ref={gira}>
         <mesh geometry={pecas.oceano} material={materiais.oceano} scale={RAIO} />
@@ -247,7 +252,7 @@ function Comemoracao({
       material.dispose();
       // Devolve o brilho emprestado aos continentes.
       terra.emissiveIntensity = 0;
-      halo.opacity = 0.16;
+      halo.opacity = 0.13;
     },
     [geometria, material, terra, halo],
   );
@@ -264,7 +269,7 @@ function Comemoracao({
       material.opacity = 0.75 * (1 - t) ** 1.5;
     }
     terra.emissiveIntensity = 0.55 * Math.sin(Math.PI * t) ** 2;
-    halo.opacity = 0.16 + 0.22 * Math.sin(Math.PI * t) ** 2;
+    halo.opacity = 0.13 + 0.24 * Math.sin(Math.PI * t) ** 2;
   });
 
   if (!ativa) return null;

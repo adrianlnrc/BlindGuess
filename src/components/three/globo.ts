@@ -72,11 +72,13 @@ export type PecasDoGlobo = {
  * Monta as três peças do globo com raio 1.
  *
  * `detalhe` é a subdivisão do icosaedro dos continentes (3 = 1.280 faces,
- * o suficiente para costa legível; 2 = 320, para celular). O oceano fica um
- * nível abaixo: ninguém percebe a diferença sob a terra e economiza vértices.
+ * o suficiente para costa legível; 2 = 320, para celular). O oceano vem um
+ * nível abaixo, com piso em 2 para a silhueta continuar redonda.
  */
 export function montaGlobo(detalhe = 3): PecasDoGlobo {
-  const oceano = new IcosahedronGeometry(1, Math.max(1, detalhe - 1));
+  // O oceano fica um nível abaixo da terra, mas nunca abaixo de 2: é ele que
+  // desenha a silhueta do planeta, e um icosaedro grosseiro vira um caroço.
+  const oceano = new IcosahedronGeometry(1, Math.max(2, detalhe - 1));
   const malha = new IcosahedronGeometry(1, detalhe);
   const posicoes = malha.getAttribute("position") as BufferAttribute;
 
