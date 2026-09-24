@@ -205,12 +205,7 @@ function Globo({ detalhe, animando, celebra }: { detalhe: number; animando: bool
         <mesh geometry={pecas.gelo} material={materiais.gelo} scale={RAIO} />
       </group>
 
-      <Comemoracao
-        key={celebra}
-        ativa={celebra > 0 && animando}
-        terra={materiais.terra}
-        halo={materiais.halo}
-      />
+      <Comemoracao celebra={animando ? celebra : 0} terra={materiais.terra} halo={materiais.halo} />
     </group>
   );
 }
@@ -219,19 +214,29 @@ function Globo({ detalhe, animando, celebra }: { detalhe: number; animando: bool
  * O instante de nível novo: uma onda que sai do planeta e um brilho curto nos
  * continentes. Dura menos de um segundo e meio e não bloqueia nada — quem
  * quiser jogar de novo clica por cima sem esperar.
+ *
+ * A onda fica sempre montada, invisível, em vez de nascer na hora da
+ * comemoração: material novo em cena é shader novo para compilar, e em GPU
+ * fraca (ou no SwiftShader dos testes) isso trava a thread principal por
+ * segundos — justo no momento que deveria ser uma festa.
  */
 function Comemoracao({
-  ativa,
+  celebra,
   terra,
   halo,
 }: {
-  ativa: boolean;
+  celebra: number;
   terra: MeshStandardMaterial;
   halo: MeshBasicMaterial;
 }) {
   const onda = useRef<Mesh>(null);
-  const tempo = useRef(0);
+  const tempo = useRef(Number.POSITIVE_INFINITY);
   const DURACAO = 1.4;
+
+  // Cada celebração nova reinicia o relógio da onda.
+  useEffect(() => {
+    tempo.current = celebra > 0 ? 0 : Number.POSITIVE_INFINITY;
+  }, [celebra]);
 
   const geometria = useMemo(() => new RingGeometry(1, 1.05, 64), []);
   const material = useMemo(
@@ -258,21 +263,16 @@ function Comemoracao({
   );
 
   useFrame((_, delta) => {
-    if (!ativa) return;
+    if (tempo.current > DURACAO) return;
     tempo.current += delta;
     const t = Math.min(1, tempo.current / DURACAO);
     const fim = 1 - (1 - t) ** 3;
 
-    if (onda.current) {
-      const escala = RAIO * (1 + fim * 1.1);
-      onda.current.scale.setScalar(escala);
-      material.opacity = 0.75 * (1 - t) ** 1.5;
-    }
+    if (onda.current) onda.current.scale.setScalar(RAIO * (1 + fim * 1.1));
+    material.opacity = 0.75 * (1 - t) ** 1.5;
     terra.emissiveIntensity = 0.55 * Math.sin(Math.PI * t) ** 2;
     halo.opacity = 0.13 + 0.24 * Math.sin(Math.PI * t) ** 2;
   });
-
-  if (!ativa) return null;
 
   return (
     <mesh ref={onda} geometry={geometria} material={material} rotation={[-Math.PI / 2, 0, 0]} scale={RAIO} />

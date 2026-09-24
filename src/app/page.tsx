@@ -226,7 +226,8 @@ export default function HomePage() {
                 celebra={ganho?.subiuDeNivel ? ganho.id : 0}
                 className="absolute inset-0"
               />
-              <AvisosDeGanho ganho={ganho} className="absolute top-0 right-0" />
+              {/* z-10: o canvas da cena ocupa a mesma caixa e pintaria por cima. */}
+              <AvisosDeGanho ganho={ganho} className="absolute top-0 right-0 z-10" />
             </div>
           </div>
         </section>

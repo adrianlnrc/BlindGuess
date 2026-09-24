@@ -70,8 +70,8 @@ function Reserva({ avatar, className }: { avatar?: AvatarType; className?: strin
         style={{
           position: "absolute",
           left: "50%",
-          bottom: "-38%",
-          width: "74%",
+          bottom: "-24%",
+          width: "58%",
           transform: "translateX(-50%)",
           aspectRatio: "1 / 1",
         }}
@@ -84,14 +84,14 @@ function Reserva({ avatar, className }: { avatar?: AvatarType; className?: strin
           style={{
             position: "absolute",
             left: "50%",
-            bottom: "38%",
-            width: "36%",
-            maxWidth: 150,
+            bottom: "42%",
+            width: "28%",
+            maxWidth: 118,
             transform: "translateX(-50%)",
             aspectRatio: "3 / 4",
           }}
         >
-          <Personagem3D avatar={avatar} tamanhoReserva={120} />
+          <Personagem3D avatar={avatar} tamanhoReserva={104} />
         </div>
       )}
     </div>
@@ -106,8 +106,8 @@ function Reserva({ avatar, className }: { avatar?: AvatarType; className?: strin
 function GloboSVG() {
   return (
     <svg viewBox="0 0 200 200" width="100%" height="100%" role="presentation">
-      <circle cx="100" cy="100" r="96" fill="#7c5cf0" opacity="0.14" />
-      <circle cx="100" cy="100" r="88" fill="#241a4c" />
+      <circle cx="100" cy="100" r="96" fill="#7c5cf0" opacity="0.18" />
+      <circle cx="100" cy="100" r="88" fill="#2b2159" />
       <g fill="#16c491">
         <polygon points="72,44 106,38 122,62 104,84 76,78 64,60" />
         <polygon points="118,92 146,86 158,108 138,130 116,122" />
@@ -115,8 +115,8 @@ function GloboSVG() {
         <polygon points="96,140 124,144 118,166 92,164" />
         <polygon points="142,58 162,66 156,80 138,74" />
       </g>
+      {/* Só a calota do sul: a do norte ficaria atrás do personagem. */}
       <g fill="#e6e2f7" opacity="0.85">
-        <polygon points="78,16 122,16 132,26 68,26" />
         <polygon points="84,182 118,182 124,174 78,174" />
       </g>
       <circle cx="100" cy="100" r="88" fill="none" stroke="#3ce7ad" strokeOpacity="0.28" strokeWidth="1.5" />
