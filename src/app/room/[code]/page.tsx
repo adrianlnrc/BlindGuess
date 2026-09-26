@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { use } from "react";
+import ChatSala from "@/components/ChatSala";
 import FinalScores from "@/components/FinalScores";
 import GameView from "@/components/GameView";
 import Lobby from "@/components/Lobby";
@@ -42,29 +43,40 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
 
   const playerId = me?.id ?? storedPlayerId(code);
   const isHost = !!me?.isHost;
+  // Sala de um jogador só (solo e desafio) não tem com quem conversar; o chat
+  // aparece onde entra mais gente pelo código.
+  const temChat = state.mode === "party" || state.mode === "duel";
 
-  switch (state.phase) {
-    case "playing":
-      return <GameView state={state} playerId={playerId} onGuess={submitGuess} />;
-    case "round-result":
-      return <RoundResult state={state} playerId={playerId} isHost={isHost} onNext={nextRound} />;
-    case "finished":
-      return (
-        <FinalScores state={state} playerId={playerId} isHost={isHost} onPlayAgain={playAgain} />
-      );
-    default:
-      return (
-        <Lobby
-          code={state.code}
-          mode={state.mode}
-          challenge={state.challenge}
-          players={state.players}
-          settings={state.settings}
-          isHost={isHost}
-          error={state.error ?? error ?? undefined}
-          onUpdateSettings={updateSettings}
-          onStart={startGame}
-        />
-      );
-  }
+  const telas = {
+    playing: <GameView state={state} playerId={playerId} onGuess={submitGuess} />,
+    "round-result": (
+      <RoundResult state={state} playerId={playerId} isHost={isHost} onNext={nextRound} />
+    ),
+    finished: (
+      <FinalScores state={state} playerId={playerId} isHost={isHost} onPlayAgain={playAgain} />
+    ),
+    lobby: (
+      <Lobby
+        code={state.code}
+        mode={state.mode}
+        challenge={state.challenge}
+        players={state.players}
+        settings={state.settings}
+        isHost={isHost}
+        error={state.error ?? error ?? undefined}
+        onUpdateSettings={updateSettings}
+        onStart={startGame}
+        chat={temChat ? <ChatSala code={state.code} variante="painel" meuId={playerId} /> : null}
+      />
+    ),
+  };
+
+  // A bolha fica fora da tela escolhida: assim ela sobrevive à troca de fase,
+  // em vez de ser remontada (perdendo a rolagem) entre a rodada e o resultado.
+  return (
+    <>
+      {telas[state.phase]}
+      {temChat && state.phase !== "lobby" && <ChatSala code={state.code} variante="bolha" meuId={playerId} />}
+    </>
+  );
 }

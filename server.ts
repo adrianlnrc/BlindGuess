@@ -2,8 +2,10 @@ import { createServer } from "node:http";
 import next from "next";
 import { Server as SocketServer, type Socket } from "socket.io";
 import {
+  CHAT_MAX_CHARS,
   DEFAULT_AVATAR,
   type Avatar,
+  type ChatMessage,
   type ClientToServerEvents,
   type Convite,
   type PlayerProfile,
@@ -35,7 +37,13 @@ const dev = process.env.NODE_ENV !== "production";
 const hostname = process.env.HOSTNAME ?? "0.0.0.0";
 const port = Number(process.env.PORT ?? 3000);
 
-type SocketData = { playerId?: string; roomCode?: string; profileId?: string };
+type SocketData = {
+  playerId?: string;
+  roomCode?: string;
+  profileId?: string;
+  /** Instante da última fala no chat — base do anti-flood, por conexão. */
+  ultimaFala?: number;
+};
 type GameSocket = Socket<ClientToServerEvents, ServerToClientEvents, never, SocketData>;
 
 const app = next({ dev, hostname, port });
@@ -98,6 +106,12 @@ function ackOnly<E extends SoAck>(
  * vez de o amigo descobrir a lotação só ao tentar entrar.
  */
 const LOTACAO_MAXIMA = 12;
+
+/**
+ * Intervalo mínimo entre duas falas da mesma conexão. Sem isso um script
+ * enche a sala mais rápido do que qualquer pessoa consegue ler.
+ */
+const INTERVALO_FALA_MS = 700;
 
 /** Resposta para quem pede algo pessoal antes de dizer quem é. */
 const NAO_IDENTIFICADO = "Identifique-se antes de usar este recurso.";
@@ -593,6 +607,48 @@ io.on("connection", (socket: GameSocket) => {
       });
   });
 
+  socket.on("enviarChat", (payload, ack) => {
+    // Uma aba antiga (ou um script) pode emitir sem ack: sem ele não há a quem
+    // responder, e chamar `ack` derrubaria a conexão.
+    if (typeof ack !== "function") return;
+
+    // Quem fala é a conexão. O payload traz só o texto — nome, avatar e sala
+    // saem do assento, senão um payload forjado falaria no lugar de outra pessoa.
+    const { roomCode, playerId } = socket.data;
+    if (!roomCode || !playerId) {
+      return ack({ ok: false, error: "Entre numa sala para conversar." });
+    }
+
+    const state = rooms.getState(roomCode);
+    if (!state) return ack({ ok: false, error: "Esta sala não existe mais." });
+
+    const eu = state.players.find((p) => p.id === playerId);
+    if (!eu) return ack({ ok: false, error: "Você não está mais nesta sala." });
+
+    const text = limpaFala(payload?.text);
+    if (!text) return ack({ ok: false, error: "Escreva algo antes de enviar." });
+
+    const agora = Date.now();
+    if (agora - (socket.data.ultimaFala ?? 0) < INTERVALO_FALA_MS) {
+      return ack({ ok: false, error: "Calma — espere um instante para falar de novo." });
+    }
+    socket.data = { ...socket.data, ultimaFala: agora };
+
+    falasEmitidas += 1;
+    const fala: ChatMessage = {
+      id: `${socket.id}-${agora}-${falasEmitidas}`,
+      playerId: eu.id,
+      playerName: eu.name,
+      avatar: eu.avatar,
+      text,
+      em: agora,
+    };
+
+    // Só para esta sala: chat de sala não é mural do jogo inteiro.
+    io.to(roomCode).emit("chat", fala);
+    ack({ ok: true });
+  });
+
   socket.on("updateSettings", ({ settings }) => {
     const { roomCode, playerId } = socket.data;
     if (roomCode && playerId) rooms.updateSettings(roomCode, playerId, settings ?? {});
@@ -645,6 +701,21 @@ httpServer.listen(port, hostname, () => {
     console.warn("! NEXT_PUBLIC_GOOGLE_MAPS_API_KEY não definida — copie .env.example para .env");
   }
 });
+
+/** Serve só para dar id único a cada fala dentro deste processo. */
+let falasEmitidas = 0;
+
+/**
+ * Deixa a fala pronta para ir ao ar: sem quebras de linha nem espaço sobrando e
+ * cortada no limite. O corte é feito aqui porque o `maxLength` do input é só
+ * conveniência — quem emite direto pelo socket não passa por ele.
+ */
+function limpaFala(text: unknown): string {
+  return String(text ?? "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, CHAT_MAX_CHARS);
+}
 
 function sanitizeName(name: unknown): string {
   return String(name ?? "")

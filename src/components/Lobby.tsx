@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import Avatar from "./Avatar";
 import ConvidarAmigos from "./ConvidarAmigos";
 import {
@@ -20,6 +20,8 @@ type Props = {
   error?: string;
   onUpdateSettings: (patch: Partial<RoomSettings>) => void;
   onStart: () => void;
+  /** Chat da sala, montado na página — aqui ele só ganha lugar na coluna. */
+  chat?: ReactNode;
 };
 
 
@@ -48,6 +50,7 @@ export default function Lobby({
   error,
   onUpdateSettings,
   onStart,
+  chat,
 }: Props) {
   const [copied, setCopied] = useState(false);
   // Num desafio os locais ja estao fixos, entao ninguem muda a configuracao.
@@ -152,6 +155,8 @@ export default function Lobby({
 
       {/* Só faz sentido chamar gente para uma sala que aceita mais gente. */}
       {mode !== "solo" && <ConvidarAmigos />}
+
+      {chat}
 
       <section className="panel space-y-6 rounded-2xl p-6">
         <h2 className="text-sm font-semibold tracking-widest text-mist-300 uppercase">
