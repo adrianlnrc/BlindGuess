@@ -5,6 +5,7 @@ import DuelBars from "./DuelBars";
 import ResultMap, { PLAYER_COLORS } from "./ResultMap";
 import ScoreBar from "./ScoreBar";
 import { formatDistance } from "@/lib/scoring";
+import { useCountdown } from "@/lib/useRoom";
 import type { RoomState } from "@/lib/types";
 
 type Props = {
@@ -15,6 +16,11 @@ type Props = {
 };
 
 export default function RoundResult({ state, playerId, isHost, onNext }: Props) {
+  // Quando o servidor marcou prazo, o resultado avanca sozinho — a contagem na
+  // tela evita a surpresa de a rodada virar sem ninguem ter clicado. Fica antes
+  // do `return` para o hook rodar sempre na mesma ordem.
+  const restante = useCountdown(state.resultEndsAt);
+
   const result = state.lastResult;
   if (!result) return null;
 
@@ -164,12 +170,15 @@ export default function RoundResult({ state, playerId, isHost, onNext }: Props) 
                   ? "Ver o resultado"
                   : "Ver placar final"
                 : "Próxima rodada"}
+            {restante !== null && ` (${restante})`}
           </button>
         ) : (
           <p className="mt-auto text-center text-mist-300">
             {retry
               ? "Esperando o anfitrião tentar a rodada de novo…"
-              : "Esperando o anfitrião continuar…"}
+              : restante !== null
+                ? `Avança sozinho em ${restante} s — sem depender do anfitrião.`
+                : "Esperando o anfitrião continuar…"}
           </p>
         )}
       </aside>

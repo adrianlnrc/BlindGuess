@@ -56,6 +56,8 @@ type Room = {
   roundEndsAt: number | null;
   resultEndsAt: number | null;
   timer: NodeJS.Timeout | null;
+  /** Separado do `timer` da rodada: os dois nunca podem se apagar por engano. */
+  resultTimer: NodeJS.Timeout | null;
   lastResult: RoundResult | null;
   /** Todas as rodadas da partida, para o resumo final. */
   history: RoundResult[];
@@ -90,6 +92,17 @@ const ROOM_TTL_MS = 6 * 60 * 60 * 1000;
 const MAX_PLAYERS = 12;
 /** Folga para o tempo de rede antes do servidor fechar a rodada. */
 const TIMER_GRACE_MS = 1500;
+/**
+ * Quanto o resultado da rodada fica na tela antes de avancar sozinho. Doze
+ * segundos e o tempo de achar o alvo no mapa, ver de quem era cada palpite e
+ * conferir o placar — menos que isso atropela quem esta lendo.
+ */
+const RESULT_MS = 12_000;
+/**
+ * O ultimo resultado espera mais: depois dele vem o placar final e a partida
+ * acaba, entao e a ultima chance de olhar o mapa com calma.
+ */
+const FINAL_RESULT_MS = 20_000;
 /** Quantas vezes tentamos sortear o local antes de desistir da rodada. */
 const LOCATION_ATTEMPTS = 3;
 /** Espera crescente entre as tentativas de sorteio (ms). */
@@ -105,12 +118,18 @@ export type RoomManagerOptions = {
   pickLocation?: typeof pickLocation;
   /** Espera entre as tentativas de sorteio, em ms. */
   retryDelaysMs?: number[];
+  /** Tempo do resultado de uma rodada comum, em ms. */
+  resultMs?: number;
+  /** Tempo do resultado da ultima rodada, em ms. */
+  finalResultMs?: number;
 };
 
 export class RoomManager {
   private rooms = new Map<string, Room>();
   private pickLocation: typeof pickLocation;
   private retryDelays: number[];
+  private resultMs: number;
+  private finalResultMs: number;
 
   constructor(
     private broadcast: (code: string) => void,
@@ -118,6 +137,8 @@ export class RoomManager {
   ) {
     this.pickLocation = options.pickLocation ?? pickLocation;
     this.retryDelays = options.retryDelaysMs ?? LOCATION_RETRY_DELAYS_MS;
+    this.resultMs = options.resultMs ?? RESULT_MS;
+    this.finalResultMs = options.finalResultMs ?? FINAL_RESULT_MS;
     setInterval(() => this.cleanup(), 15 * 60 * 1000).unref?.();
   }
 
@@ -173,6 +194,7 @@ export class RoomManager {
       roundEndsAt: null,
       resultEndsAt: null,
       timer: null,
+      resultTimer: null,
       lastResult: null,
       history: [],
       search: null,
@@ -438,6 +460,18 @@ export class RoomManager {
     const room = this.rooms.get(code);
     if (!room || room.hostId !== playerId || room.phase !== "round-result") return;
 
+    await this.advanceRound(room);
+  }
+
+  /**
+   * Avanca o resultado para o que vem depois. E o unico caminho: o clique do
+   * anfitriao e o timer do avanco automatico entram os dois por aqui, e o
+   * primeiro que chegar cancela o outro — sem isto a sala pularia uma rodada
+   * quando o anfitriao clica no mesmo instante em que o tempo vence.
+   */
+  private async advanceRound(room: Room): Promise<void> {
+    this.clearResultTimer(room);
+
     if (room.mode === "duel") {
       if (room.duelWinnerId) {
         await this.finishGame(room);
@@ -461,6 +495,7 @@ export class RoomManager {
     if (!room || room.hostId !== playerId) return;
 
     this.clearTimer(room);
+    this.clearResultTimer(room);
     room.phase = "lobby";
     room.round = 0;
     room.target = null;
@@ -508,6 +543,7 @@ export class RoomManager {
 
   private async beginRound(room: Room): Promise<void> {
     this.clearTimer(room);
+    this.clearResultTimer(room);
     room.guesses.clear();
     room.error = undefined;
     room.canRetryRound = false;
@@ -587,6 +623,7 @@ export class RoomManager {
    */
   private giveUpRound(room: Room): void {
     this.clearTimer(room);
+    this.clearResultTimer(room);
     room.round = Math.max(0, room.round - 1);
     room.target = null;
     room.roundEndsAt = null;
@@ -637,8 +674,52 @@ export class RoomManager {
     room.history = [...room.history, room.lastResult];
     room.target = null;
     room.touchedAt = Date.now();
+    this.scheduleAutoAdvance(room);
 
     this.broadcast(room.code);
+  }
+
+  /**
+   * Marca quando o resultado avanca sozinho e arma o timer. Sem isto a sala
+   * fica presa para sempre se o anfitriao fecha a aba no resultado.
+   */
+  private scheduleAutoAdvance(room: Room): void {
+    this.clearResultTimer(room);
+
+    // O sorteio do local falhou: tentar de novo e uma decisao de gente, nao de
+    // relogio — repetir a falha sozinho so faria a sala girar em falso.
+    if (room.canRetryRound) return;
+
+    // Um jogador so: ele proprio e o anfitriao, ninguem depende dele para
+    // continuar e a sala abandonada e recolhida pelo `cleanup`. Avancar sozinho
+    // aqui so tiraria do desafio do dia o tempo de olhar o mapa com calma.
+    const acompanhando = [...room.players.values()].filter((p) => p.connected).length;
+    if (acompanhando <= 1) return;
+
+    const espera = this.isLastResult(room) ? this.finalResultMs : this.resultMs;
+    // Sem a folga de rede do cronometro da rodada: aqui nao esperamos palpite
+    // de ninguem, entao o prazo mostrado na tela e a hora exata do avanco.
+    room.resultEndsAt = Date.now() + espera;
+    room.resultTimer = setTimeout(() => {
+      void this.autoAdvance(room).catch((err) => console.error("[rooms] avanço automático", err));
+    }, espera);
+  }
+
+  /** O tempo do resultado venceu e ninguem avancou antes. */
+  private async autoAdvance(room: Room): Promise<void> {
+    // A sala pode ter sido fechada, reiniciada ou ja avancada nesse meio tempo.
+    if (this.rooms.get(room.code) !== room) return;
+    if (room.phase !== "round-result" || room.resultEndsAt === null) return;
+
+    await this.advanceRound(room);
+  }
+
+  /** Este resultado e o ultimo da partida: o proximo passo e o placar final. */
+  private isLastResult(room: Room): boolean {
+    if (room.mode === "duel") {
+      return room.duelWinnerId !== null || room.round >= DUEL_MAX_ROUNDS;
+    }
+    return room.round >= room.settings.rounds;
   }
 
   /**
@@ -683,6 +764,8 @@ export class RoomManager {
    * a persistencia nao pode segurar a tela dos jogadores.
    */
   private async finishGame(room: Room): Promise<void> {
+    this.clearTimer(room);
+    this.clearResultTimer(room);
     room.phase = "finished";
     this.broadcast(room.code);
 
@@ -802,8 +885,16 @@ export class RoomManager {
     room.timer = null;
   }
 
+  /** Cancela o avanco automatico e apaga o prazo que estava na tela. */
+  private clearResultTimer(room: Room): void {
+    if (room.resultTimer) clearTimeout(room.resultTimer);
+    room.resultTimer = null;
+    room.resultEndsAt = null;
+  }
+
   private destroy(room: Room): void {
     this.clearTimer(room);
+    this.clearResultTimer(room);
     this.rooms.delete(room.code);
   }
 
