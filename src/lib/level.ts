@@ -10,7 +10,9 @@ export function xpForLevel(level: number): number {
 }
 
 export function levelForXp(xp: number): number {
-  if (xp <= 0) return 1;
+  // `xp <= 0` e falso para NaN, entao sem esta guarda o nivel sairia NaN e a
+  // tela mostraria "Nivel NaN" com a barra de progresso quebrada.
+  if (!Number.isFinite(xp) || xp <= 0) return 1;
   return Math.floor(Math.sqrt(xp / STEP)) + 1;
 }
 

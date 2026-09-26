@@ -16,6 +16,7 @@
     "teste:convite": "tsx scripts/teste-convite.ts",
     "teste:diagnostico": "tsx scripts/teste-diagnostico.ts",
     "teste:duelo": "tsx scripts/teste-duelo.ts",
+    "teste:economia": "tsx scripts/teste-economia.ts",
     "teste:integracao-maps": "tsx scripts/teste-integracao-maps.ts",
     "teste:locations": "tsx scripts/teste-locations.ts",
     "teste:navegador": "tsx scripts/teste-navegador.ts",

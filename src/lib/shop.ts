@@ -68,14 +68,25 @@ export function coinsEarned(input: {
   streakLength?: number;
 }): number {
   if (input.mode === "streak") {
-    return Math.max(0, Math.floor(input.streakLength ?? 0)) * COINS_POR_PAIS;
+    return inteiroSao(input.streakLength) * COINS_POR_PAIS;
   }
 
-  let coins = Math.floor(Math.max(0, input.totalScore) / 1000);
+  let coins = Math.floor(inteiroSao(input.totalScore) / 1000);
 
   if (input.isDaily) coins += 25;
   if (input.duelOutcome === "win") coins += 40;
   if (input.duelOutcome === "draw") coins += 15;
 
   return coins;
+}
+
+/**
+ * Numero nao finito nunca vira saldo. O resultado daqui vai para um
+ * `coins = coins + $2` no banco, e NaN ou Infinity ali nao dao moeda a mais:
+ * quebram a transacao ou corrompem o saldo. Nao achei caminho que chegue com
+ * lixo hoje; isto e o piso para que uma mudanca la em cima nao chegue.
+ */
+function inteiroSao(valor: number | undefined): number {
+  if (typeof valor !== "number" || !Number.isFinite(valor)) return 0;
+  return Math.max(0, Math.floor(valor));
 }
