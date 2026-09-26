@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useState } from "react";
 import Avatar from "./Avatar";
 import DuelBars from "./DuelBars";
+import MatchSummary from "./MatchSummary";
+import { PLAYER_COLORS } from "./ResultMap";
 import type { RoomState } from "@/lib/types";
 
 type Props = {
@@ -77,7 +79,7 @@ export default function FinalScores({ state, playerId, isHost, onPlayAgain }: Pr
   }
 
   return (
-    <main className="mx-auto flex min-h-dvh w-full max-w-2xl flex-col justify-center gap-8 px-6 py-12">
+    <main className="mx-auto flex min-h-dvh w-full max-w-5xl flex-col justify-center gap-8 px-4 py-12 sm:px-6">
       <header className="text-center">
         <p className="text-xs tracking-widest text-mist-300 uppercase">Fim de jogo</p>
         <h1 className="text-4xl font-black">Placar final</h1>
@@ -86,7 +88,7 @@ export default function FinalScores({ state, playerId, isHost, onPlayAgain }: Pr
         </p>
       </header>
 
-      <ol className="space-y-3">
+      <ol className="mx-auto w-full max-w-2xl space-y-3">
         {state.players.map((player, index) => (
           <li
             key={player.id}
@@ -96,6 +98,11 @@ export default function FinalScores({ state, playerId, isHost, onPlayAgain }: Pr
           >
             <span className="flex min-w-0 items-center gap-3">
               <span className="w-8 text-2xl">{MEDALS[index] ?? `${index + 1}º`}</span>
+              {/* Mesma cor que as linhas do mapa do percurso, para ligar as duas leituras. */}
+              <span
+                className="size-3 shrink-0 rounded-full"
+                style={{ background: PLAYER_COLORS[index % PLAYER_COLORS.length] }}
+              />
               <Avatar avatar={player.avatar} size={40} className="rounded-lg" />
               <span className="truncate text-lg font-semibold">{player.name}</span>
             </span>
@@ -107,7 +114,7 @@ export default function FinalScores({ state, playerId, isHost, onPlayAgain }: Pr
       </ol>
 
       {shareCode && (
-        <section className="panel space-y-3 rounded-2xl p-5 text-center">
+        <section className="panel mx-auto w-full max-w-2xl space-y-3 rounded-2xl p-5 text-center">
           <p className="text-mist-300">
             {state.challenge
               ? "Mande o link para mais gente encarar os mesmos lugares."
@@ -131,7 +138,7 @@ export default function FinalScores({ state, playerId, isHost, onPlayAgain }: Pr
         </section>
       )}
 
-      <div className="flex flex-wrap gap-3">
+      <div className="mx-auto flex w-full max-w-2xl flex-wrap gap-3">
         {isHost && (
           <button
             type="button"
@@ -148,6 +155,9 @@ export default function FinalScores({ state, playerId, isHost, onPlayAgain }: Pr
           {state.mode === "party" ? "Sair da sala" : "Voltar ao início"}
         </Link>
       </div>
+
+      {/* O percurso fica por último: o pódio e as ações continuam no topo. */}
+      <MatchSummary state={state} playerId={playerId} />
     </main>
   );
 }
