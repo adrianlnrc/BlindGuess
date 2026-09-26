@@ -12,6 +12,25 @@ type Props = {
   onGuess: (position: LatLng) => void;
 };
 
+/**
+ * Cantos da tela de jogo — quem chegar depois com mais HUD escolhe daqui.
+ *
+ *   alto à esquerda  rodada e, empilhado embaixo, "Esperando: …" (aqui)
+ *   alto ao centro   cronômetro (aqui)
+ *   alto à direita   "Palpitaram" ou as barras do duelo (aqui)
+ *   baixo à esquerda bússola, controles do panorama e a lista de atalhos
+ *                    (`StreetView.tsx`) — foi de onde o "Esperando" saiu: os
+ *                    dois moravam em `bottom-4 left-4` e se cobriam
+ *   baixo à direita  mini-mapa do palpite, que cresce para a esquerda e para
+ *                    cima quando o jogador aumenta (`GuessMap.tsx`)
+ *
+ * O chat da sala (`ChatSala.tsx`, montado na página da sala) ancora a bolha em
+ * `bottom-3 left-3` no desktop e numa faixa em `top-16` no celular. Por isso a
+ * coluna do `StreetView` sobe 80px a partir do `sm`: os 56px de baixo à
+ * esquerda são do chat. No celular a faixa do chat passa por cima desta coluna
+ * de cima à esquerda — quem mexer no chat resolve por lá, que é onde a faixa é
+ * posicionada.
+ */
 export default function GameView({ state, playerId, onGuess }: Props) {
   const remaining = useCountdown(state.roundEndsAt);
   const alreadyGuessed = !!playerId && state.submitted.includes(playerId);
@@ -44,12 +63,26 @@ export default function GameView({ state, playerId, onGuess }: Props) {
 
       {/* HUD superior */}
       <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-4 p-4">
-        <div className="panel rounded-xl px-4 py-2.5">
-          <p className="text-xs tracking-widest text-mist-300 uppercase">Rodada</p>
-          <p className="num text-xl">
-            {state.round}
-            {!state.duel && <span className="text-mist-300">/{state.settings.rounds}</span>}
-          </p>
+        {/* Coluna da esquerda: a rodada e, pendurado embaixo dela, quem ainda
+            falta palpitar — pendurado porque a largura do painel de espera não
+            pode espremer o cronômetro e o contador desta mesma linha. */}
+        <div className="relative">
+          <div className="panel rounded-xl px-4 py-2.5">
+            <p className="text-xs tracking-widest text-mist-300 uppercase">Rodada</p>
+            <p className="num text-xl">
+              {state.round}
+              {!state.duel && <span className="text-mist-300">/{state.settings.rounds}</span>}
+            </p>
+          </div>
+
+          {alreadyGuessed && waiting.length > 0 && (
+            // No celular a faixa do chat da sala passa em `top-16`, logo abaixo
+            // da rodada: o painel desce para não ficar embaixo dela.
+            <div className="panel absolute top-full left-0 mt-[4.5rem] max-w-56 rounded-xl px-4 py-3 sm:mt-3">
+              <p className="text-sm text-mist-300">Esperando:</p>
+              <p className="font-medium">{waiting.map((p) => p.name).join(", ")}</p>
+            </div>
+          )}
         </div>
 
         {remaining !== null && (
@@ -95,12 +128,6 @@ export default function GameView({ state, playerId, onGuess }: Props) {
         <GuessMap onConfirm={onGuess} disabled={alreadyGuessed} />
       </div>
 
-      {alreadyGuessed && waiting.length > 0 && (
-        <div className="panel absolute bottom-4 left-4 max-w-xs rounded-xl px-4 py-3">
-          <p className="text-sm text-mist-300">Esperando:</p>
-          <p className="font-medium">{waiting.map((p) => p.name).join(", ")}</p>
-        </div>
-      )}
     </main>
   );
 }
