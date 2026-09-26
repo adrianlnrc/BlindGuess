@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Avatar from "@/components/Avatar";
 import AvatarEditor from "@/components/AvatarEditor";
 import DailyCard from "@/components/DailyCard";
@@ -41,22 +41,37 @@ export default function HomePage() {
   useEffect(() => setProfile(loadProfile()), []);
 
   /**
+   * O perfil sempre atual, para quem precisa lê-lo fora do render em que foi
+   * criado — hoje o `identify`, que fica pendurado no evento de reconexão.
+   */
+  const perfilRef = useRef(profile);
+  perfilRef.current = profile;
+
+  /**
    * Diz ao servidor quem somos e recebe a identidade canônica de volta: logado,
    * o id vem da conta (e adota o perfil de convidado no primeiro login).
    */
+  const perfilId = profile?.id;
+
   useEffect(() => {
-    if (!profile) return;
+    if (!perfilId) return;
 
     const socket = getSocket();
 
     const identify = () => {
-      socket.emit("identify", { profile }, (res) => {
+      // Lê o perfil na hora de emitir, não o do render em que o efeito rodou:
+      // o efeito só re-roda quando o id muda, então um apelido novo ficaria
+      // preso neste closure e a reconexão mandaria o nome velho de volta.
+      const atual = perfilRef.current;
+      if (!atual) return;
+
+      socket.emit("identify", { profile: atual }, (res) => {
         if (!res.ok) return;
 
         setAccount({ authenticated: res.authenticated, email: res.email });
 
         // O servidor pode devolver outro id (conta) ou o nome vindo do Google.
-        if (res.profile.id !== profile.id || res.profile.name !== profile.name) {
+        if (res.profile.id !== atual.id || res.profile.name !== atual.name) {
           setProfile(res.profile);
           saveProfileLocal(res.profile);
         }
@@ -81,8 +96,9 @@ export default function HomePage() {
       socket.off("connect", identify);
       socket.off("presence", onPresence);
     };
-    // Reidentifica quando a identidade muda, não a cada tecla no apelido.
-  }, [profile?.id]);
+    // Reidentifica quando a identidade muda, não a cada tecla no apelido — o
+    // apelido novo chega pelo `perfilRef`, sem remontar os ouvintes.
+  }, [perfilId]);
 
   const update = useCallback((patch: Partial<PlayerProfile>) => {
     setProfile((current) => {
