@@ -76,6 +76,13 @@ const DICA_BANCO =
  */
 function pistaDeErro(err: unknown): string {
   const code = (err as { code?: unknown })?.code;
+  const texto = err instanceof Error ? err.message : "";
+
+  // Desencontro de TLS nao tem codigo, so mensagem — e e a falha mais provavel
+  // de quem aponta para um Postgres de rede interna, onde TLS nao e oferecido.
+  if (/does not support SSL|SSL connection|sslmode/i.test(texto)) {
+    return "desencontro de SSL — veja PGSSLMODE no .env.example";
+  }
 
   switch (code) {
     case "ECONNREFUSED":
