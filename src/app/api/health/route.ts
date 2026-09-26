@@ -60,10 +60,40 @@ async function checkDatabase(): Promise<Check> {
     await getPool().query("SELECT 1");
     return { ok: true, detail: "conectado" };
   } catch (err) {
-    return {
-      ok: false,
-      detail: `falha ao conectar: ${mensagemDeErro(err)} — confira DATABASE_URL, se o Postgres está no ar e se aceita conexões deste host.`,
-    };
+    // A mensagem crua do driver traz host, porta e usuário do banco, e esta
+    // rota é pública: o detalhe vai para o log do servidor, não para a resposta.
+    console.error("[health] banco:", mensagemDeErro(err));
+    return { ok: false, detail: `falha ao conectar (${pistaDeErro(err)}) — ${DICA_BANCO}` };
+  }
+}
+
+const DICA_BANCO =
+  "confira DATABASE_URL, se o Postgres está no ar e se aceita conexões deste host. O motivo exato está no log do servidor.";
+
+/**
+ * Uma pista curta e sem segredo, para quem está configurando saber por onde
+ * começar. Nunca o texto do driver: ele nomeia host, porta e usuário.
+ */
+function pistaDeErro(err: unknown): string {
+  const code = (err as { code?: unknown })?.code;
+
+  switch (code) {
+    case "ECONNREFUSED":
+      return "conexão recusada";
+    case "ENOTFOUND":
+    case "EAI_AGAIN":
+      return "host não resolvido";
+    case "ETIMEDOUT":
+    case "ECONNRESET":
+      return "tempo esgotado";
+    case "28P01":
+      return "credenciais recusadas";
+    case "3D000":
+      return "banco não existe";
+    case "28000":
+      return "conexão não autorizada";
+    default:
+      return typeof code === "string" && /^[A-Z0-9]{1,10}$/.test(code) ? code : "erro desconhecido";
   }
 }
 
@@ -111,9 +141,11 @@ async function checkMapsServerKey(): Promise<Check> {
     }
     data = (await res.json()) as { status?: string; error_message?: string };
   } catch (err) {
+    // Idem: a mensagem pode nomear proxy e host de saída.
+    console.error("[health] maps:", mensagemDeErro(err));
     return {
       ok: false,
-      detail: `não foi possível falar com a API do Google: ${mensagemDeErro(err)} — verifique a saída de rede do servidor.`,
+      detail: `não foi possível falar com a API do Google (${pistaDeErro(err)}) — verifique a saída de rede do servidor. O motivo exato está no log.`,
     };
   }
 
