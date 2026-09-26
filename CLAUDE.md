@@ -16,7 +16,7 @@ verificado contra dublês, fixtures e testes de navegador.
 ## Comandos
 
 ```bash
-npm test              # as 15 suítes, 17 execuções (precisa de build + Postgres)
+npm test              # as 16 suítes, 18 execuções (precisa de build + Postgres)
 npm run test:rapido   # só as que não sobem servidor
 npm run typecheck
 npm run build

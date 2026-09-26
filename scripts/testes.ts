@@ -32,6 +32,7 @@ const SUITES: Suite[] = [
   { arquivo: "teste-pontuacao.ts", titulo: "pontuação por tamanho de mapa" },
   { arquivo: "teste-paises.ts", titulo: "descoberta de país" },
   { arquivo: "teste-configuracao.ts", titulo: "configuração da sala" },
+  { arquivo: "teste-duelo.ts", titulo: "duelo 1v1" },
   {
     arquivo: "teste-virada-do-dia.ts",
     titulo: "virada do dia",

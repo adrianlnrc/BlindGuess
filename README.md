@@ -187,7 +187,7 @@ O schema é criado sozinho na subida do servidor — não há passo de migraçã
 ## Testes
 
 ```bash
-npm test              # as 15 suítes, 17 execuções
+npm test              # as 16 suítes, 18 execuções
 npm run test:rapido   # só as que não sobem servidor
 ```
 
