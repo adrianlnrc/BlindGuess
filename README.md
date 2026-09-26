@@ -15,6 +15,7 @@ letras e todo mundo joga as mesmas rodadas ao mesmo tempo, com placar ao vivo.
 | **Sala com amigos** | Todos jogam as mesmas rodadas ao mesmo tempo, com placar ao vivo. |
 | **Duelo 1v1** | Vida contra vida. Cada um começa com 6.000; a cada rodada, quem chuta mais longe perde a diferença de pontos em vida. Acaba quando alguém zera. |
 | **Desafio por link** | Os locais são sorteados na criação e ficam fixos. Você joga, manda o link, e cada amigo encara exatamente os mesmos lugares quando quiser. Vale a melhor marca de cada um. |
+| **Sequência de países** *(em desenvolvimento)* | Sem pontuação: acertou o país onde a rodada caiu, a sequência cresce e vem outro lugar; errou, acabou. O que fica é o recorde. |
 
 Toda partida livre (solo ou em grupo) também vira um desafio compartilhável no fim —
 o link reaproveita os locais que acabaram de ser jogados.
@@ -103,19 +104,34 @@ cookie e conferindo na tabela `sessions`.
 
 Cada jogador monta um bonequinho próprio: tom de pele, cor da roupa, cor de detalhe,
 chapéu (boné, explorador, gorro, fone) e rosto (sorriso, concentrado, óculos, escuros).
-É tudo SVG gerado em código, sem imagem externa. O avatar aparece no lobby, nos
-resultados de cada rodada, no placar final e nos rankings.
+É tudo gerado em código, sem imagem externa: SVG no jogo, e um boneco 3D em Three.js na
+tela de personalização e na tela inicial. Sem WebGL, o 3D cai para o SVG sozinho. O avatar
+aparece no lobby, nos resultados de cada rodada, no placar final e nos rankings.
 
 ## Como funciona
 
 - **Salas em tempo real** via WebSocket (Socket.IO). Código de 5 caracteres, até 12 jogadores.
 - **Anfitrião configura** rodadas (1–20), tempo por rodada (30s a sem limite), região e as
   restrições clássicas: pode andar, pode girar a câmera, pode dar zoom.
-- **Regiões**: mundo todo, Brasil, Europa, Américas, Ásia ou pontos famosos (modo fácil).
+- **Teclado no panorama**: setas giram e inclinam, `W`/`S` andam, `+`/`−` dão zoom, `R`
+  volta ao ponto inicial, espaço confirma o palpite. Cada atalho respeita a regra da sala.
+- **Regiões**: os nove mapas da tabela acima, de pontos famosos a mundo rural.
 - **Pontuação**: até 5.000 pontos por rodada, com decaimento exponencial sobre a distância
-  em linha reta — acertar na mosca dá 5.000, errar meio planeta dá ~0.
+  em linha reta — acertar na mosca dá 5.000, errar meio planeta dá ~0. A régua é o
+  **tamanho do mapa**, não o planeta: errar 300 km vale 4.089 pontos no mundo e 2.623 no
+  Brasil, porque num mapa menor o mesmo erro custa mais. Sem isso, escolher região pequena
+  seria só uma forma de inflar placar.
 - **Rodada fecha** quando todo mundo palpita ou quando o cronômetro zera (o servidor é a
   autoridade do tempo, não o navegador).
+- **O resultado avança sozinho** — 12 s no comum, 20 s no último — para a sala não ficar
+  presa se o anfitrião fechar a aba. Ele ainda pode adiantar. Sala de um jogador só não
+  tem relógio aqui: ali ninguém fica preso, e dá para olhar o mapa com calma.
+- **Resumo da partida** no placar final: onde cada local caiu, onde cada um chutou e
+  quanto errou, com filtro por rodada e por jogador.
+- **Chat da sala**: painel no lobby, bolha recolhível durante a rodada. Com o campo
+  focado, os atalhos do jogo não disparam.
+- **Chamar amigo**: quem está na sua lista e com o jogo aberto entra na sala sem você
+  passar código.
 - **Contador de presença**: quantas pessoas estão com o jogo aberto, ao vivo.
 - **Reconexão**: se você atualizar a página ou cair no meio da partida, volta para a mesma
   sala com a pontuação intacta.
@@ -164,8 +180,23 @@ Variáveis de ambiente:
 | `AUTH_RESEND_KEY` / `EMAIL_FROM` | Magic link por e-mail (opcional) |
 | `PORT` | Porta do servidor (padrão `3000`) |
 | `BLINDGUESS_TIMEZONE` | Fuso que define a virada do dia no streak (padrão `America/Sao_Paulo`) |
+| `PGSSLMODE` | `disable` desliga o TLS do Postgres. Só se a conexão falhar com erro de SSL — bancos de rede interna costumam não oferecer TLS |
 
 O schema é criado sozinho na subida do servidor — não há passo de migração manual.
+
+## Testes
+
+```bash
+npm test              # as 15 suítes, 17 execuções
+npm run test:rapido   # só as que não sobem servidor
+```
+
+Sete suítes sobem o `server.ts` de verdade, então precisam do build de produção e de um
+Postgres no ar. Faltando qualquer um dos dois, elas são **puladas com o motivo** e o
+resumo avisa que a cobertura ficou incompleta — pular não é passar.
+
+Não há API do Google sendo chamada em teste nenhum: o sorteio de local, a descoberta de
+país e a integração com o Maps rodam contra dublês fiéis ao contrato de cada API.
 
 ## Produção
 
@@ -237,11 +268,19 @@ src/lib/level.ts          curva de XP e nível
 src/lib/duel.ts           regras de dano do duelo
 src/lib/catalog.ts        catálogo de mapas e dificuldades
 src/lib/shop.ts           catálogo da loja e regra de moedas
-src/components/           Street View, mapa de palpite, lobby, avatar, resultados
+src/server/paises.ts      descobre o país de um ponto (sequência de países)
+src/components/hudZonas.ts âncoras do HUD da tela de jogo, num lugar só
+src/components/           Street View, mapa de palpite, lobby, chat, avatar, resultados
+src/components/three/     personagem e globo em Three.js
+scripts/testes.ts         roda todas as suítes; scripts/teste-*.ts são as suítes
 ```
 
 ## Limitações conhecidas
 
+- **O jogo ainda não foi jogado de verdade.** Falta a chave do Google Maps, que só o dono
+  do projeto pode criar; sem ela o mapa e o panorama mostram mensagem de erro. Tudo o que
+  existe foi verificado contra dublês, fixtures e testes de navegador — o que prova que o
+  código faz o que diz, não que o jogo é divertido. Comece por `/api/health`.
 - Reiniciar o servidor derruba as **salas em andamento** (o progresso já gravado
   sobrevive no banco).
 - Convidado continua preso ao `localStorage`: limpar o navegador começa um perfil novo.
