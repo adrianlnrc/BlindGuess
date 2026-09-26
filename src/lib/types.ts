@@ -214,6 +214,8 @@ export type RoomState = {
   /** Ids de quem ja enviou palpite na rodada atual. */
   submitted: string[];
   lastResult: RoundResult | null;
+  /** Todas as rodadas da partida, na ordem — alimenta o resumo final. */
+  history: RoundResult[];
   error?: string;
   /**
    * Preenchido enquanto o servidor procura o local da rodada. Serve para a
@@ -235,11 +237,24 @@ export type LocationSearch = {
   maxAttempts: number;
 };
 
+/** Convite de um amigo para entrar na sala dele. */
+export type Convite = {
+  deId: string;
+  deNome: string;
+  deAvatar: Avatar;
+  roomCode: string;
+  mode: GameMode;
+  /** ms epoch — o cliente descarta convite velho. */
+  em: number;
+};
+
 export type ServerToClientEvents = {
   state: (state: RoomState) => void;
   errorMessage: (message: string) => void;
   /** Quantas pessoas estão com o jogo aberto agora. */
   presence: (payload: { online: number }) => void;
+  /** Um amigo chamou você para a sala dele. */
+  convite: (payload: Convite) => void;
 };
 
 type RoomAck = (
@@ -291,6 +306,11 @@ export type ClientToServerEvents = {
   addFriend: (
     payload: { code: string },
     ack: (res: { ok: true; friends: Friend[] } | { ok: false; error: string }) => void,
+  ) => void;
+  /** Chama um amigo para a sala em que estou agora. */
+  convidarAmigo: (
+    payload: { friendId: string },
+    ack: (res: { ok: true } | { ok: false; error: string }) => void,
   ) => void;
   removeFriend: (
     payload: { friendId: string },

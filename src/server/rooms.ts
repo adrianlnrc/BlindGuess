@@ -56,6 +56,8 @@ type Room = {
   roundEndsAt: number | null;
   timer: NodeJS.Timeout | null;
   lastResult: RoundResult | null;
+  /** Todas as rodadas da partida, para o resumo final. */
+  history: RoundResult[];
   error?: string;
   /** Progresso da busca pelo local, enquanto ela acontece. */
   search: LocationSearch | null;
@@ -170,6 +172,7 @@ export class RoomManager {
       roundEndsAt: null,
       timer: null,
       lastResult: null,
+      history: [],
       search: null,
       canRetryRound: false,
       touchedAt: Date.now(),
@@ -415,6 +418,7 @@ export class RoomManager {
     room.round = 0;
     room.usedPanos.clear();
     room.lastResult = null;
+    room.history = [];
     room.playedLocations = [];
     room.sharedChallengeCode = null;
     room.recorded = false;
@@ -461,6 +465,7 @@ export class RoomManager {
     room.guesses.clear();
     room.usedPanos.clear();
     room.lastResult = null;
+    room.history = [];
     room.roundEndsAt = null;
     room.error = undefined;
     room.search = null;
@@ -619,6 +624,7 @@ export class RoomManager {
     const damage = room.mode === "duel" ? this.applyDuelDamage(room) : null;
 
     room.lastResult = { round: room.round, target: { ...room.target }, guesses, damage };
+    room.history = [...room.history, room.lastResult];
     room.target = null;
     room.touchedAt = Date.now();
 
@@ -755,6 +761,7 @@ export class RoomManager {
       roundEndsAt: room.roundEndsAt,
       submitted: [...room.guesses.keys()],
       lastResult: room.lastResult,
+      history: room.history,
       error: room.error,
       locationSearch: room.search,
       canRetryRound: room.canRetryRound,
