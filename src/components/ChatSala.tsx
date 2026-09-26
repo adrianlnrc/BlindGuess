@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Avatar from "./Avatar";
+import { ZONA_CHAT } from "./hudZonas";
 import { getSocket } from "@/lib/socket";
 import { CHAT_MAX_CHARS, type ChatMessage } from "@/lib/types";
 
@@ -222,7 +223,7 @@ export default function ChatSala({ code, variante, meuId }: Props) {
   return (
     <div
       ref={raiz}
-      className="pointer-events-none fixed inset-x-2 top-24 z-40 sm:inset-x-auto sm:top-auto sm:bottom-3 sm:left-20"
+      className={`pointer-events-none ${ZONA_CHAT}`}
     >
       {aberto ? (
         <section className="panel pointer-events-auto flex h-[36vh] max-h-72 flex-col rounded-2xl shadow-2xl sm:h-80 sm:w-80">

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ZONA_CAMERA } from "./hudZonas";
 import { loadMaps } from "@/lib/maps";
 import type { RoomSettings } from "@/lib/types";
 
@@ -321,12 +322,10 @@ export default function StreetView({ panoId, settings }: Props) {
       {!settings.allowPan && <div className="absolute inset-0 cursor-not-allowed" />}
 
       {/*
-        Canto de baixo à esquerda: bússola, controles e a lista de atalhos. No
-        desktop a coluna sobe 80px porque a bolha do chat da sala ancora em
-        `bottom-3 left-3` — os 56px dela ficam livres embaixo. No celular o chat
-        é uma faixa no alto, então aqui o canto é todo nosso.
+        Canto de baixo à esquerda: bússola, controles e a lista de atalhos. A
+        folga que deixa a bolha do chat passar está em `hudZonas.ts`.
       */}
-      <div className="absolute bottom-4 left-4 flex flex-col items-center gap-3 sm:bottom-20">
+      <div className={ZONA_CAMERA}>
         <Compass heading={heading} onClick={lookNorth} />
 
         <div className="relative flex flex-col overflow-visible">

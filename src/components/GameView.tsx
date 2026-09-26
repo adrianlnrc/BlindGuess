@@ -2,6 +2,7 @@
 
 import DuelBars from "./DuelBars";
 import GuessMap from "./GuessMap";
+import { ZONA_ESPERANDO } from "./hudZonas";
 import StreetView from "./StreetView";
 import { useCountdown } from "@/lib/useRoom";
 import type { LatLng, RoomState } from "@/lib/types";
@@ -13,23 +14,10 @@ type Props = {
 };
 
 /**
- * Cantos da tela de jogo — quem chegar depois com mais HUD escolhe daqui.
- *
- *   alto à esquerda  rodada e, empilhado embaixo, "Esperando: …" (aqui)
- *   alto ao centro   cronômetro (aqui)
- *   alto à direita   "Palpitaram" ou as barras do duelo (aqui)
- *   baixo à esquerda bússola, controles do panorama e a lista de atalhos
- *                    (`StreetView.tsx`) — foi de onde o "Esperando" saiu: os
- *                    dois moravam em `bottom-4 left-4` e se cobriam
- *   baixo à direita  mini-mapa do palpite, que cresce para a esquerda e para
- *                    cima quando o jogador aumenta (`GuessMap.tsx`)
- *
- * O chat da sala (`ChatSala.tsx`, montado na página da sala) ancora a bolha em
- * `bottom-3 left-3` no desktop e numa faixa em `top-16` no celular. Por isso a
- * coluna do `StreetView` sobe 80px a partir do `sm`: os 56px de baixo à
- * esquerda são do chat. No celular a faixa do chat passa por cima desta coluna
- * de cima à esquerda — quem mexer no chat resolve por lá, que é onde a faixa é
- * posicionada.
+ * Este arquivo desenha o alto da tela: rodada, cronômetro, "Palpitaram"/duelo e
+ * o painel "Esperando". Os outros cantos são de `StreetView.tsx` (câmera),
+ * `GuessMap.tsx` (mini-mapa) e `ChatSala.tsx` (chat) — as âncoras e as folgas
+ * entre eles vivem em `hudZonas.ts`, e é lá que se mexe.
  */
 export default function GameView({ state, playerId, onGuess }: Props) {
   const remaining = useCountdown(state.roundEndsAt);
@@ -76,9 +64,7 @@ export default function GameView({ state, playerId, onGuess }: Props) {
           </div>
 
           {alreadyGuessed && waiting.length > 0 && (
-            // No celular a faixa do chat da sala passa em `top-16`, logo abaixo
-            // da rodada: o painel desce para não ficar embaixo dela.
-            <div className="panel absolute top-full left-0 mt-[4.5rem] max-w-56 rounded-xl px-4 py-3 sm:mt-3">
+            <div className={ZONA_ESPERANDO}>
               <p className="text-sm text-mist-300">Esperando:</p>
               <p className="font-medium">{waiting.map((p) => p.name).join(", ")}</p>
             </div>
