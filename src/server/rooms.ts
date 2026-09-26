@@ -14,7 +14,7 @@ import {
   type RoundResult,
   type LocationSearch,
 } from "@/lib/types";
-import { pickLocation, type PickedLocation } from "./locations";
+import { mapSizeKmFor, pickLocation, type PickedLocation } from "./locations";
 import {
   createChallenge,
   getChallenge,
@@ -494,7 +494,9 @@ export class RoomManager {
       playerName: player.name,
       position,
       distanceMeters,
-      score: scoreForDistance(distanceMeters),
+      // Normaliza pelo tamanho do mapa: 300 km de erro num mapa do Brasil doi
+      // muito mais do que 300 km no mundo inteiro.
+      score: scoreForDistance(distanceMeters, mapSizeKmFor(room.settings.region)),
     });
 
     room.touchedAt = Date.now();
@@ -623,7 +625,13 @@ export class RoomManager {
 
     const damage = room.mode === "duel" ? this.applyDuelDamage(room) : null;
 
-    room.lastResult = { round: room.round, target: { ...room.target }, guesses, damage };
+    room.lastResult = {
+      round: room.round,
+      target: { ...room.target },
+      guesses,
+      damage,
+      mapSizeKm: mapSizeKmFor(room.settings.region),
+    };
     room.history = [...room.history, room.lastResult];
     room.target = null;
     room.touchedAt = Date.now();

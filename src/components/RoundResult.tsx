@@ -71,6 +71,15 @@ export default function RoundResult({ state, playerId, isHost, onNext }: Props) 
         {myGuess && (
           <section className="rounded-xl border border-beam-500/40 bg-beam-500/5 p-4">
             <ScoreBar score={myGuess.score} distanceMeters={myGuess.distanceMeters} />
+
+            {/* Sem isto, perder pontos com 300 km de erro num mapa do Brasil
+                parece injusto — e a régua, não o palpite, que mudou. */}
+            {result.mapSizeKm !== undefined && result.mapSizeKm < 14_916 && (
+              <p className="mt-2 text-center text-xs text-mist-300">
+                Mapa de {result.mapSizeKm.toLocaleString("pt-BR")} km — num mapa menor, o mesmo
+                erro custa mais pontos.
+              </p>
+            )}
           </section>
         )}
 

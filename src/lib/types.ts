@@ -102,6 +102,11 @@ export type RoundResult = {
   guesses: Guess[];
   /** Só no duelo: quem levou dano e quanto. */
   damage?: { playerId: string; amount: number; multiplier: number } | null;
+  /**
+   * Diagonal do mapa jogado, em km. É por ela que a pontuação é normalizada,
+   * então a tela consegue explicar por que 300 km valeram pouco no Brasil.
+   */
+  mapSizeKm?: number;
 };
 
 /** Estado do duelo 1v1. */

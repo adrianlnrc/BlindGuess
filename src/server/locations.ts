@@ -128,6 +128,61 @@ function seedsFor(region: RegionId): LatLng[] {
 }
 
 /**
+ * "Tamanho do mapa": a diagonal da area coberta pelas sementes, com uma folga
+ * para o jitter do sorteio. E o que normaliza a pontuacao — errar 300 km num
+ * mapa do Brasil nao pode valer o mesmo que errar 300 km no mundo inteiro.
+ *
+ * A longitude e circular: Oceania vai de 115 leste a -175, e uma caixa ingenua
+ * daria quase a volta ao mundo. Por isso o vao de longitude e o maior buraco
+ * entre sementes vizinhas, e o intervalo util e o que sobra dele.
+ */
+function tamanhoDoMapaKm(region: RegionId): number {
+  // O mundo tem tamanho fixo: e a referencia com que o GeoGuessr trabalha.
+  if (region === "world") return 14_916;
+
+  const sementes = seedsFor(region);
+  if (sementes.length < 2) return 14_916;
+
+  const lats = sementes.map((s) => s.lat);
+  const norte = Math.max(...lats);
+  const sul = Math.min(...lats);
+
+  const lngs = [...sementes.map((s) => s.lng)].sort((a, b) => a - b);
+  let maiorVao = lngs[0] + 360 - lngs[lngs.length - 1];
+  for (let i = 1; i < lngs.length; i += 1) {
+    maiorVao = Math.max(maiorVao, lngs[i] - lngs[i - 1]);
+  }
+  const vaoLng = 360 - maiorVao;
+
+  // A folga cobre o jitter do sorteio (ate 1,6 grau) nas duas pontas.
+  const FOLGA_GRAUS = 3.2;
+  const alturaKm = (norte - sul + FOLGA_GRAUS) * 111;
+  // Largura medida na latitude media, onde o meridiano ainda e largo.
+  const latMedia = ((norte + sul) / 2) * (Math.PI / 180);
+  const larguraKm = (vaoLng + FOLGA_GRAUS) * 111 * Math.cos(latMedia);
+
+  const diagonal = Math.hypot(alturaKm, Math.max(0, larguraKm));
+  // Nunca maior que o mundo, e nunca tao pequeno que so o acerto exato pontue.
+  return Math.round(Math.min(14_916, Math.max(500, diagonal)));
+}
+
+/** Diagonal do mapa de cada regiao, calculada uma vez. */
+const TAMANHOS = new Map<RegionId, number>();
+
+/**
+ * Quanto "vale" um erro nesta regiao: a pontuacao da rodada e normalizada por
+ * este numero (veja `scoreForDistance`).
+ */
+export function mapSizeKmFor(region: RegionId): number {
+  const pronto = TAMANHOS.get(region);
+  if (pronto !== undefined) return pronto;
+
+  const tamanho = tamanhoDoMapaKm(region);
+  TAMANHOS.set(region, tamanho);
+  return tamanho;
+}
+
+/**
  * A dificuldade muda o quao longe da semente o sorteio pode cair e o raio de
  * busca do panorama. Mapa facil cai perto de cidade; dificil joga voce numa
  * estrada rural, onde nao ha placa nem ponto de referencia.
