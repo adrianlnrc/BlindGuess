@@ -77,7 +77,7 @@ export type PlayerProfile = {
   avatar: Avatar;
 };
 
-export type GameMode = "party" | "solo" | "challenge" | "duel";
+export type GameMode = "party" | "solo" | "challenge" | "duel" | "streak";
 
 export type Player = {
   id: string;
@@ -107,6 +107,27 @@ export type RoundResult = {
    * então a tela consegue explicar por que 300 km valeram pouco no Brasil.
    */
   mapSizeKm?: number;
+};
+
+/**
+ * Estado do modo "sequência de países": em vez de pontos, a rodada é acerto ou
+ * erro. Acertou o país, a sequência cresce e vem outro lugar; errou, acabou.
+ */
+export type StreakState = {
+  /** Quantos países seguidos o jogador acertou nesta partida. */
+  current: number;
+  /** Melhor sequência do perfil, para ele saber o que está tentando bater. */
+  best: number;
+  /** Onde a rodada caiu de verdade. Só é revelado no resultado da rodada. */
+  countryName: string | null;
+  countryCode: string | null;
+  /** Para onde o jogador apontou. */
+  guessCountryName: string | null;
+  guessCountryCode: string | null;
+  /** Definido no resultado: a sequência continua ou morreu aqui. */
+  correct: boolean | null;
+  /** Errou: a partida acabou. */
+  over: boolean;
 };
 
 /** Estado do duelo 1v1. */
@@ -209,6 +230,8 @@ export type RoomState = {
   sharedChallengeCode: string | null;
   /** Preenchido apenas no modo duelo. */
   duel: DuelState | null;
+  /** Preenchido apenas no modo sequência de países. */
+  streak: StreakState | null;
   settings: RoomSettings;
   players: Player[];
   round: number;
@@ -216,6 +239,12 @@ export type RoomState = {
   panorama: { panoId: string } | null;
   /** Timestamp (ms epoch) em que a rodada acaba. null = sem limite. */
   roundEndsAt: number | null;
+  /**
+   * Timestamp (ms epoch) em que o resultado da rodada avança sozinho. Existe
+   * porque o anfitrião pode fechar a aba no meio da partida — sem isto a sala
+   * inteira fica presa esperando alguém que não volta.
+   */
+  resultEndsAt: number | null;
   /** Ids de quem ja enviou palpite na rodada atual. */
   submitted: string[];
   lastResult: RoundResult | null;
@@ -295,6 +324,8 @@ export type ClientToServerEvents = {
   ) => void;
   createRoom: (payload: { profile: PlayerProfile }, ack: RoomAck) => void;
   joinRoom: (payload: { code: string; profile: PlayerProfile; playerId?: string }, ack: RoomAck) => void;
+  /** Cria uma sala de sequencia de paises, de um jogador so. */
+  createStreak: (payload: { profile: PlayerProfile; settings?: Partial<RoomSettings> }, ack: RoomAck) => void;
   /** Cria uma sala de um jogador so. */
   createSolo: (payload: { profile: PlayerProfile; settings?: Partial<RoomSettings> }, ack: RoomAck) => void;
   /** Sorteia os locais, guarda como desafio e abre uma sala para o criador jogar. */

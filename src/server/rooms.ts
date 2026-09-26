@@ -54,6 +54,7 @@ type Room = {
   usedPanos: Set<string>;
   guesses: Map<string, Guess>;
   roundEndsAt: number | null;
+  resultEndsAt: number | null;
   timer: NodeJS.Timeout | null;
   lastResult: RoundResult | null;
   /** Todas as rodadas da partida, para o resumo final. */
@@ -170,6 +171,7 @@ export class RoomManager {
       usedPanos: new Set(),
       guesses: new Map(),
       roundEndsAt: null,
+      resultEndsAt: null,
       timer: null,
       lastResult: null,
       history: [],
@@ -753,6 +755,8 @@ export class RoomManager {
               winnerId: room.duelWinnerId,
             }
           : null,
+      // Preenchido quando o modo sequência de países existir.
+      streak: null,
       settings: room.settings,
       players: [...room.players.values()]
         .map((player): Player => ({
@@ -767,6 +771,7 @@ export class RoomManager {
       round: room.round,
       panorama: room.phase === "playing" && room.target ? { panoId: room.target.panoId } : null,
       roundEndsAt: room.roundEndsAt,
+      resultEndsAt: room.resultEndsAt,
       submitted: [...room.guesses.keys()],
       lastResult: room.lastResult,
       history: room.history,

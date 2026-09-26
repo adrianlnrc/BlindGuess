@@ -1,4 +1,4 @@
-import type { FaceId, HatId } from "./types";
+import type { FaceId, GameMode, HatId } from "./types";
 
 export type ShopItem = {
   id: string;
@@ -49,16 +49,28 @@ export function itemsOfKind(kind: ShopItem["kind"]): ShopItem[] {
 
 // ------------------------------------------------------------------ moedas
 
+/** Moedas por pais acertado na sequencia. Cinco paises pagam como vencer um duelo. */
+export const COINS_POR_PAIS = 8;
+
 /**
  * Moedas ganhas numa partida: uma a cada mil pontos, com bonus por modo.
  * O desafio do dia paga a mais porque so da para jogar uma vez.
+ *
+ * A sequencia de paises nao tem pontuacao — acerto ou erro —, entao ela paga
+ * por pais acertado. Sem isso, um jogo inteiro de sequencia pagaria zero.
  */
 export function coinsEarned(input: {
   totalScore: number;
-  mode: "party" | "solo" | "challenge" | "duel";
+  mode: GameMode;
   isDaily: boolean;
   duelOutcome?: "win" | "loss" | "draw" | null;
+  /** So no modo sequencia: quantos paises o jogador acertou seguidos. */
+  streakLength?: number;
 }): number {
+  if (input.mode === "streak") {
+    return Math.max(0, Math.floor(input.streakLength ?? 0)) * COINS_POR_PAIS;
+  }
+
   let coins = Math.floor(Math.max(0, input.totalScore) / 1000);
 
   if (input.isDaily) coins += 25;

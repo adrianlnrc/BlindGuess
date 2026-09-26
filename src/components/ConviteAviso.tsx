@@ -15,6 +15,7 @@ const MODO_LABEL: Record<Convite["mode"], string> = {
   duel: "duelo 1v1",
   challenge: "desafio",
   solo: "sala",
+  streak: "sequência de países",
 };
 
 /**

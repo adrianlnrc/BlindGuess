@@ -2,6 +2,7 @@ import type {
   Avatar,
   ChallengeSummary,
   Friend,
+  GameMode,
   Leaderboards,
   PlayerProfile,
   ProfileStats,
@@ -219,7 +220,7 @@ export async function getStats(playerId: string): Promise<ProfileStats | null> {
  */
 export async function recordGame(input: {
   profile: PlayerProfile;
-  mode: "party" | "solo" | "challenge" | "duel";
+  mode: GameMode;
   region: RegionId;
   rounds: number;
   totalScore: number;
