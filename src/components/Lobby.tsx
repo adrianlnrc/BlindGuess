@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Avatar from "./Avatar";
+import ConvidarAmigos from "./ConvidarAmigos";
 import {
   DIFFICULTY_LABEL,
   DIFFICULTY_ORDER,
@@ -148,6 +149,9 @@ export default function Lobby({
           </ul>
         </section>
       )}
+
+      {/* Só faz sentido chamar gente para uma sala que aceita mais gente. */}
+      {mode !== "solo" && <ConvidarAmigos />}
 
       <section className="panel space-y-6 rounded-2xl p-6">
         <h2 className="text-sm font-semibold tracking-widest text-mist-300 uppercase">

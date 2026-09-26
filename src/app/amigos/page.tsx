@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import Avatar from "@/components/Avatar";
+import { useConvidar } from "@/components/ConvidarAmigos";
+import { salaAtual } from "@/components/salaAtual";
 import { loadProfile } from "@/lib/profile";
 import { getSocket } from "@/lib/socket";
 import type { Friend, PlayerProfile } from "@/lib/types";
@@ -16,8 +18,12 @@ export default function FriendsPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  // Só oferece "chamar" para quem já tem uma sala aberta nesta aba.
+  const [sala, setSala] = useState<string | null>(null);
+  const { estado: convites, convidar } = useConvidar();
 
   useEffect(() => setProfile(loadProfile()), []);
+  useEffect(() => setSala(salaAtual()), []);
 
   const refresh = useCallback(() => {
     getSocket().emit("fetchFriends", (res) => {
@@ -189,7 +195,27 @@ export default function FriendsPage() {
                   {friend.streak > 0 && ` · 🔥 ${friend.streak}`}
                   {friend.online ? " · jogando agora" : ""}
                 </p>
+                {typeof convites[friend.profileId] === "object" && (
+                  <p className="text-xs text-flare-400">
+                    {(convites[friend.profileId] as { erro: string }).erro}
+                  </p>
+                )}
               </div>
+
+              {sala && friend.online && (
+                <button
+                  type="button"
+                  onClick={() => convidar(friend)}
+                  disabled={convites[friend.profileId] === "enviando" || convites[friend.profileId] === "chamado"}
+                  className="shrink-0 rounded-lg border border-ink-600 px-3 py-1.5 text-sm font-medium transition hover:border-beam-500 hover:text-beam-400 disabled:cursor-default disabled:border-ink-700 disabled:text-mist-300"
+                >
+                  {convites[friend.profileId] === "enviando"
+                    ? "Chamando…"
+                    : convites[friend.profileId] === "chamado"
+                      ? "Chamado ✓"
+                      : `Chamar para ${sala}`}
+                </button>
+              )}
 
               <button
                 type="button"

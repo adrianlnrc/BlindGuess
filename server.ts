@@ -5,6 +5,7 @@ import {
   DEFAULT_AVATAR,
   type Avatar,
   type ClientToServerEvents,
+  type Convite,
   type PlayerProfile,
   type ServerToClientEvents,
 } from "./src/lib/types.ts";
@@ -14,6 +15,7 @@ import { userFromCookieHeader } from "./src/server/session.ts";
 import { paidItemFor } from "./src/lib/shop.ts";
 import {
   addFriendByCode,
+  areFriends,
   buyItem,
   claimGuest,
   getChallengeSummary,
@@ -90,6 +92,13 @@ function ackOnly<E extends SoAck>(
   }) as ClientToServerEvents[E];
 }
 
+/**
+ * Quantas pessoas cabem numa sala que não é duelo — o mesmo limite aplicado em
+ * `RoomManager.joinRoom`. Serve para recusar o convite antes de mandá-lo, em
+ * vez de o amigo descobrir a lotação só ao tentar entrar.
+ */
+const LOTACAO_MAXIMA = 12;
+
 /** Resposta para quem pede algo pessoal antes de dizer quem é. */
 const NAO_IDENTIFICADO = "Identifique-se antes de usar este recurso.";
 
@@ -149,13 +158,26 @@ async function resolveProfile(
   return { profile, authenticated: true, email: user.email };
 }
 
+/**
+ * Sala interna com todas as conexões de um mesmo perfil. É por ela que o
+ * convite chega em todas as abas da pessoa. O nome tem `:` e minúsculas, que
+ * nunca aparecem num código de sala, então não colide com as salas de jogo.
+ */
+function perfilRoom(profileId: string): string {
+  return `perfil:${profileId}`;
+}
+
 /** Amarra a presença do perfil a esta conexão, trocando se a identidade mudar. */
 function trackPresence(socket: GameSocket, profileId: string): void {
   if (socket.data.profileId === profileId) return;
-  if (socket.data.profileId) markOffline(socket.data.profileId);
+  if (socket.data.profileId) {
+    markOffline(socket.data.profileId);
+    socket.leave(perfilRoom(socket.data.profileId));
+  }
 
   socket.data = { ...socket.data, profileId };
   markOnline(profileId);
+  socket.join(perfilRoom(profileId));
 }
 
 /**
@@ -407,6 +429,57 @@ io.on("connection", (socket: GameSocket) => {
         ack({ ok: true, friends: await getFriends(playerId, isOnline) });
       })
       .catch((err) => fail(err, "addFriend", ack));
+  });
+
+  socket.on("convidarAmigo", ({ friendId }, ack) => {
+    if (!hasDatabase()) return ack({ ok: false, error: "Convites precisam do banco configurado." });
+
+    resolvePlayerId(socket)
+      .then(async (playerId) => {
+        // Quem convida é sempre a conexão. O payload só diz quem é o convidado,
+        // e essa escolha ainda passa pela checagem de amizade no banco.
+        if (!playerId) return ack({ ok: false, error: NAO_IDENTIFICADO });
+
+        const alvo = String(friendId ?? "").trim();
+        if (!alvo) return ack({ ok: false, error: "Escolha um amigo para chamar." });
+        if (alvo === playerId) return ack({ ok: false, error: "Esse convite é para você mesmo." });
+
+        const { roomCode, playerId: seatId } = socket.data;
+        if (!roomCode || !seatId) {
+          return ack({ ok: false, error: "Entre numa sala antes de chamar alguém." });
+        }
+
+        const state = rooms.getState(roomCode);
+        if (!state) return ack({ ok: false, error: "Esta sala não existe mais." });
+        if (state.phase !== "lobby") {
+          return ack({ ok: false, error: "A partida já começou — não dá para entrar agora." });
+        }
+        if (state.players.length >= (state.mode === "duel" ? 2 : LOTACAO_MAXIMA)) {
+          return ack({ ok: false, error: "A sala está cheia." });
+        }
+
+        if (!(await areFriends(playerId, alvo))) {
+          return ack({ ok: false, error: "Você só pode chamar quem está na sua lista de amigos." });
+        }
+        if (!isOnline(alvo)) {
+          return ack({ ok: false, error: "Esse amigo não está com o jogo aberto agora." });
+        }
+
+        const eu = state.players.find((p) => p.id === seatId);
+        const convite: Convite = {
+          deId: playerId,
+          deNome: eu?.name ?? "Um amigo",
+          deAvatar: eu?.avatar ?? { ...DEFAULT_AVATAR },
+          roomCode: state.code,
+          mode: state.mode,
+          em: Date.now(),
+        };
+
+        // Chega em todas as abas da pessoa, não só na última que abriu.
+        io.to(perfilRoom(alvo)).emit("convite", convite);
+        ack({ ok: true });
+      })
+      .catch((err) => fail(err, "convidarAmigo", ack));
   });
 
   socket.on("removeFriend", ({ friendId }, ack) => {

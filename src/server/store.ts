@@ -502,6 +502,24 @@ export async function addFriendByCode(
   return { ok: true };
 }
 
+/**
+ * Existe amizade entre os dois? O convite de sala confia nisto, nunca no que o
+ * cliente afirma: `friendId` chega do payload, então a amizade precisa estar
+ * gravada no banco — e no sentido de quem convida, que é o único id vindo da
+ * conexão. A tabela guarda os dois sentidos (veja `addFriendByCode`), então uma
+ * linha basta.
+ */
+export async function areFriends(playerId: string, friendId: string): Promise<boolean> {
+  if (!playerId || !friendId || playerId === friendId) return false;
+
+  const { rowCount } = await getPool().query(
+    `SELECT 1 FROM friendships WHERE player_id = $1 AND friend_id = $2 LIMIT 1`,
+    [playerId, friendId],
+  );
+
+  return (rowCount ?? 0) > 0;
+}
+
 export async function removeFriend(playerId: string, friendId: string): Promise<void> {
   await getPool().query(
     `DELETE FROM friendships

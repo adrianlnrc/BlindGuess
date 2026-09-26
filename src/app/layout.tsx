@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Outfit, Plus_Jakarta_Sans } from "next/font/google";
+import ConviteAviso from "@/components/ConviteAviso";
 import "./globals.css";
 
 /** Voz pesada: títulos, placar, cronômetro, vida, moedas. */
@@ -34,7 +35,11 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="pt-BR" className={`${display.variable} ${body.variable}`}>
-      <body className="min-h-dvh antialiased">{children}</body>
+      <body className="min-h-dvh antialiased">
+        {children}
+        {/* Convite de amigo chega em qualquer tela, por isso vive no layout. */}
+        <ConviteAviso />
+      </body>
     </html>
   );
 }
