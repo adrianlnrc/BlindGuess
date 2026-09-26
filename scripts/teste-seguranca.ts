@@ -520,6 +520,68 @@ async function main(): Promise<void> {
       exige(daConta.items.includes("hat_bucket"), "o item não foi para a conta logada");
       return `carteira da sessão (500 moedas) e compra debitada na conta, não em A`;
     });
+    console.log("\n[5] o perfil que chega do cliente é saneado antes de valer");
+    // `loadProfile` no navegador aceita o que estiver no localStorage sem
+    // conferir a forma, e esse perfil e transmitido a todos na sala. E este
+    // portao que torna aquela frouxidao inofensiva: se ele cair, avatar
+    // inventado e id com caractere estranho passam a circular entre jogadores.
+    await verifica("id com caractere estranho é limpo, não aceito como veio", async () => {
+      const socket = await conecta();
+      abertos.push(socket);
+
+      const res = await identify(socket, {
+        id: "../../etc/passwd; DROP TABLE players--",
+        name: "Perfil torto",
+        avatar: { ...DEFAULT_AVATAR },
+      });
+      exige(res.ok, `identify recusou: ${res.ok ? "" : res.error}`);
+      exige(
+        /^[a-zA-Z0-9_-]+$/.test(res.profile.id),
+        `o id voltou com caractere perigoso: ${res.profile.id}`,
+      );
+      exige(res.profile.id.length <= 40, `o id voltou com ${res.profile.id.length} caracteres`);
+      return `id saneado para "${res.profile.id}"`;
+    });
+
+    await verifica("chapéu e rosto inventados voltam para o padrão", async () => {
+      const socket = await conecta();
+      abertos.push(socket);
+
+      const res = await identify(socket, {
+        id: "seg-avatar-torto",
+        name: "Avatar torto",
+        avatar: {
+          skin: "javascript:alert(1)",
+          outfit: "#16b886",
+          accent: "não é cor",
+          hat: "chapeu-que-nao-existe" as never,
+          face: "rosto-inventado" as never,
+        },
+      });
+      exige(res.ok, `identify recusou: ${res.ok ? "" : res.error}`);
+
+      const a = res.profile.avatar;
+      exige(a.hat === DEFAULT_AVATAR.hat, `o chapéu inventado passou: ${a.hat}`);
+      exige(a.face === DEFAULT_AVATAR.face, `o rosto inventado passou: ${a.face}`);
+      exige(/^#[0-9a-fA-F]{6}$/.test(a.skin), `a pele não virou cor: ${a.skin}`);
+      exige(/^#[0-9a-fA-F]{6}$/.test(a.accent), `o detalhe não virou cor: ${a.accent}`);
+      exige(a.outfit === "#16b886", `a cor válida foi descartada: ${a.outfit}`);
+      return `chapéu → ${a.hat}, rosto → ${a.face}, cores → ${a.skin}/${a.accent}`;
+    });
+
+    await verifica("perfil sem nome é recusado", async () => {
+      const socket = await conecta();
+      abertos.push(socket);
+
+      const res = await identify(socket, {
+        id: "seg-sem-nome",
+        name: "   ",
+        avatar: { ...DEFAULT_AVATAR },
+      });
+      exige(!res.ok, "um perfil sem nome foi aceito");
+      return `recusado ("${res.ok ? "" : res.error}")`;
+    });
+
   } finally {
     for (const socket of abertos) socket.close();
     server.kill("SIGTERM");
