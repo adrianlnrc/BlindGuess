@@ -30,11 +30,22 @@ export function today(at: Date = new Date()): string {
   }).format(at);
 }
 
-/** Quando o desafio de amanha abre, em ms epoch. */
+/**
+ * Quando o desafio de amanha abre, em ms epoch.
+ *
+ * O deslocamento do fuso e medido no proprio instante da virada, nao em `at`:
+ * num fuso com horario de verao (o nosso nao tem mais, mas `BLINDGUESS_TIMEZONE`
+ * deixa trocar) medir agora e aplicar em amanha erraria uma hora justamente na
+ * noite da mudanca. Duas passadas bastam — a primeira acerta o dia, a segunda
+ * acerta o deslocamento daquele dia.
+ */
 export function nextDailyResetAt(at: Date = new Date()): number {
-  const offsetMs = tzOffsetMs(STREAK_TZ, at);
-  const tomorrow = new Date(Date.parse(`${today(at)}T00:00:00Z`) + 86_400_000);
-  return Date.parse(`${tomorrow.toISOString().slice(0, 10)}T00:00:00Z`) - offsetMs;
+  const meiaNoiteLocal = Date.parse(`${today(at)}T00:00:00Z`) + 86_400_000;
+
+  let quando = meiaNoiteLocal - tzOffsetMs(STREAK_TZ, at);
+  quando = meiaNoiteLocal - tzOffsetMs(STREAK_TZ, new Date(quando));
+
+  return quando;
 }
 
 /** Diferenca entre o fuso configurado e o UTC no instante dado. */
@@ -64,7 +75,10 @@ function tzOffsetMs(timeZone: string, at: Date): number {
     Number(parts.second),
   );
 
-  return asUtc - at.getTime();
+  // `asUtc` so tem precisao de segundo. Sem descartar os milissegundos de `at`,
+  // o deslocamento carregaria o resto do relogio e a funcao daria um valor
+  // diferente a cada chamada dentro do mesmo segundo.
+  return asUtc - Math.floor(at.getTime() / 1000) * 1000;
 }
 
 function daysBetween(from: string, to: string): number {
