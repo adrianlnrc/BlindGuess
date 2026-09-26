@@ -7,6 +7,7 @@ import {
   type LatLng,
   type Player,
   type RoomPhase,
+  type RegionId,
   type RoomSettings,
   type GameMode,
   type PlayerProfile,
@@ -15,6 +16,7 @@ import {
   type LocationSearch,
   type StreakState,
 } from "@/lib/types";
+import { MAPS } from "@/lib/catalog";
 import { mapSizeKmFor, pickLocation, type PickedLocation } from "./locations";
 import { paisDe, type Pais } from "./paises";
 import {
@@ -1248,9 +1250,21 @@ function randomId(): string {
 function sanitizeSettings(settings: RoomSettings): RoomSettings {
   return {
     ...settings,
+    // A regiao vem do cliente e vira chave de busca nas sementes: uma regiao
+    // que nao existe nao da sorteio ruim, estoura (`seeds` fica indefinido).
+    region: regiaoValida(settings.region) ? settings.region : DEFAULT_SETTINGS.region,
     rounds: clamp(Math.round(settings.rounds), 1, 20),
     roundSeconds: clamp(Math.round(settings.roundSeconds), 0, 600),
+    // Sao regras de jogo, nao dados: qualquer coisa vinda do cliente vira bool.
+    allowMove: settings.allowMove !== false,
+    allowPan: settings.allowPan !== false,
+    allowZoom: settings.allowZoom !== false,
   };
+}
+
+/** A regiao existe no catalogo? "world" nao esta em `MAPS`, mas sempre vale. */
+function regiaoValida(region: unknown): region is RegionId {
+  return region === "world" || MAPS.some((mapa) => mapa.id === region);
 }
 
 function clamp(value: number, min: number, max: number): number {
