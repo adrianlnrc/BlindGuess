@@ -248,6 +248,21 @@ export type Convite = {
   em: number;
 };
 
+/** Uma fala no chat da sala. O servidor carimba autor e hora; o cliente só manda o texto. */
+export type ChatMessage = {
+  id: string;
+  /** Id do assento na sala (`Player.id`), não o perfil. */
+  playerId: string;
+  playerName: string;
+  avatar: Avatar;
+  text: string;
+  /** ms epoch, carimbado pelo servidor. */
+  em: number;
+};
+
+/** Limite de caracteres de uma fala — o servidor corta, não confia no cliente. */
+export const CHAT_MAX_CHARS = 200;
+
 export type ServerToClientEvents = {
   state: (state: RoomState) => void;
   errorMessage: (message: string) => void;
@@ -255,6 +270,8 @@ export type ServerToClientEvents = {
   presence: (payload: { online: number }) => void;
   /** Um amigo chamou você para a sala dele. */
   convite: (payload: Convite) => void;
+  /** Alguém falou na sala em que esta conexão está. */
+  chat: (payload: ChatMessage) => void;
 };
 
 type RoomAck = (
@@ -293,6 +310,14 @@ export type ClientToServerEvents = {
     ack: (res: { stats: ProfileStats | null }) => void,
   ) => void;
   fetchLeaderboards: (ack: (res: { leaderboards: Leaderboards }) => void) => void;
+  /**
+   * Fala na sala desta conexão. Quem fala é sempre a conexão (`socket.data`),
+   * nunca um id vindo do payload.
+   */
+  enviarChat: (
+    payload: { text: string },
+    ack: (res: { ok: true } | { ok: false; error: string }) => void,
+  ) => void;
   /**
    * Saldo de moedas e itens de quem está nesta conexão. Não leva profileId: a
    * identidade vem da sessão ou do `identify`, nunca do payload.
