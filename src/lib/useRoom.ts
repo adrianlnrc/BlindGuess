@@ -15,9 +15,20 @@ export function useRoom(code: string) {
   const [state, setState] = useState<RoomState | null>(null);
   const [status, setStatus] = useState<JoinStatus>("connecting");
   const [error, setError] = useState<string | null>(null);
+  /**
+   * O assento nesta sala. Fica em estado, nao numa leitura do localStorage no
+   * meio do render, por dois motivos: no servidor essa leitura nao existe, e
+   * numa rejuncao o React descarta `setStatus("joined")` quando o status ja era
+   * esse — sem re-render, um assento novo ficaria invisivel para a tela, e o
+   * jogador se veria como outra pessoa (palpite que nao conta como dele, barra
+   * de vida do adversario apontando para o lado errado).
+   */
+  const [playerId, setPlayerId] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     const socket = getSocket();
+    // Cada sala tem o seu assento: entrar noutra nao pode herdar o anterior.
+    setPlayerId(storedPlayerId(code));
 
     const join = () => {
       const profile = loadProfile();
@@ -30,6 +41,7 @@ export function useRoom(code: string) {
       socket.emit("joinRoom", { code, profile, playerId: storedPlayerId(code) }, (res) => {
         if (res.ok) {
           rememberPlayer(code, res.playerId);
+          setPlayerId(res.playerId);
           setStatus("joined");
           setError(null);
         } else {
@@ -55,7 +67,6 @@ export function useRoom(code: string) {
     };
   }, [code]);
 
-  const playerId = typeof window === "undefined" ? undefined : storedPlayerId(code);
   const me = state?.players.find((p) => p.id === playerId) ?? null;
 
   const updateSettings = useCallback((settings: Partial<RoomSettings>) => {
@@ -70,7 +81,18 @@ export function useRoom(code: string) {
     [],
   );
 
-  return { state, me, status, error, updateSettings, startGame, nextRound, playAgain, submitGuess };
+  return {
+    state,
+    me,
+    playerId,
+    status,
+    error,
+    updateSettings,
+    startGame,
+    nextRound,
+    playAgain,
+    submitGuess,
+  };
 }
 
 /** Segundos restantes ate `endsAt`, atualizado a cada 250 ms. */

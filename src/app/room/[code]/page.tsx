@@ -7,15 +7,24 @@ import FinalScores from "@/components/FinalScores";
 import GameView from "@/components/GameView";
 import Lobby from "@/components/Lobby";
 import RoundResult from "@/components/RoundResult";
-import { storedPlayerId } from "@/lib/socket";
 import { useRoom } from "@/lib/useRoom";
 
 export default function RoomPage({ params }: { params: Promise<{ code: string }> }) {
   const { code: rawCode } = use(params);
   const code = rawCode.toUpperCase();
 
-  const { state, me, status, error, updateSettings, startGame, nextRound, playAgain, submitGuess } =
-    useRoom(code);
+  const {
+    state,
+    me,
+    playerId: assento,
+    status,
+    error,
+    updateSettings,
+    startGame,
+    nextRound,
+    playAgain,
+    submitGuess,
+  } = useRoom(code);
 
   if (status === "error") {
     return (
@@ -41,7 +50,7 @@ export default function RoomPage({ params }: { params: Promise<{ code: string }>
     );
   }
 
-  const playerId = me?.id ?? storedPlayerId(code);
+  const playerId = me?.id ?? assento;
   const isHost = !!me?.isHost;
   // Sala de um jogador só (solo e desafio) não tem com quem conversar; o chat
   // aparece onde entra mais gente pelo código.
