@@ -127,7 +127,7 @@ export default function HomePage() {
    * simplesmente já está diferente. As regras (`lib/level.ts`, `lib/shop.ts`)
    * não mudam — só o jeito de mostrar.
    */
-  const ganho = useGanhoDeProgresso(stats?.totalScore ?? null, carteira?.coins ?? null);
+  const ganho = useGanhoDeProgresso(perfilId, stats?.totalScore ?? null, carteira?.coins ?? null);
   const moedasMostradas = useContagem(
     carteira?.coins ?? 0,
     ganho && ganho.moedas > 0 ? ganho.moedasAntes : null,

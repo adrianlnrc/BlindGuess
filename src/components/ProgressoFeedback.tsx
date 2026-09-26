@@ -14,7 +14,18 @@ import { levelForXp } from "@/lib/level";
  * animamos do valor antigo até o atual.
  */
 
-const CHAVE = "blindguess:progresso-visto";
+/**
+ * A chave leva o id do perfil. Global, ela misturaria contas na mesma maquina:
+ * entrar com a conta (50.000 de XP), sair, jogar de convidado (2.000) e voltar
+ * a conta faria a tela comemorar "+48.000 XP" e uma subida de nivel que nunca
+ * aconteceu. Convidado e conta convivem de proposito neste jogo, entao isto e
+ * alcancavel por uma pessoa so.
+ */
+const CHAVE_BASE = "blindguess:progresso-visto";
+
+function chaveDoPerfil(perfilId: string): string {
+  return `${CHAVE_BASE}:${perfilId}`;
+}
 /** Quanto tempo os avisos de ganho ficam na tela. */
 const DURACAO_AVISO = 4200;
 
@@ -32,9 +43,9 @@ export type Ganho = {
 
 type Visto = { xp: number; moedas: number };
 
-function leVisto(): Visto | null {
+function leVisto(perfilId: string): Visto | null {
   try {
-    const raw = window.localStorage.getItem(CHAVE);
+    const raw = window.localStorage.getItem(chaveDoPerfil(perfilId));
     if (!raw) return null;
     const dados = JSON.parse(raw) as Partial<Visto>;
     if (typeof dados.xp !== "number" || typeof dados.moedas !== "number") return null;
@@ -44,9 +55,9 @@ function leVisto(): Visto | null {
   }
 }
 
-function salvaVisto(valor: Visto): void {
+function salvaVisto(perfilId: string, valor: Visto): void {
   try {
-    window.localStorage.setItem(CHAVE, JSON.stringify(valor));
+    window.localStorage.setItem(chaveDoPerfil(perfilId), JSON.stringify(valor));
   } catch {
     // modo anônimo: sem memória entre visitas, o ganho só não aparece
   }
@@ -59,15 +70,19 @@ function salvaVisto(valor: Visto): void {
  * com o que comparar, então não inventa ganho nenhum. O valor visto é gravado
  * na hora, então recarregar a página não repete a comemoração.
  */
-export function useGanhoDeProgresso(xp: number | null, moedas: number | null): Ganho | null {
+export function useGanhoDeProgresso(
+  perfilId: string | undefined,
+  xp: number | null,
+  moedas: number | null,
+): Ganho | null {
   const [ganho, setGanho] = useState<Ganho | null>(null);
   const contador = useRef(0);
 
   useEffect(() => {
-    if (xp === null || moedas === null) return;
+    if (!perfilId || xp === null || moedas === null) return;
 
-    const visto = leVisto();
-    salvaVisto({ xp, moedas });
+    const visto = leVisto(perfilId);
+    salvaVisto(perfilId, { xp, moedas });
     if (!visto) return;
 
     const dXp = xp - visto.xp;
@@ -87,7 +102,7 @@ export function useGanhoDeProgresso(xp: number | null, moedas: number | null): G
       nivelDepois,
       subiuDeNivel: nivelDepois > nivelAntes,
     });
-  }, [xp, moedas]);
+  }, [perfilId, xp, moedas]);
 
   useEffect(() => {
     if (!ganho) return;
