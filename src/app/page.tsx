@@ -20,7 +20,7 @@ import type {
   ProfileStats,
 } from "@/lib/types";
 
-type Mode = "solo" | "party" | "challenge" | "daily" | "duel";
+type Mode = "solo" | "party" | "challenge" | "daily" | "duel" | "streak";
 
 export default function HomePage() {
   const router = useRouter();
@@ -157,6 +157,16 @@ export default function HomePage() {
         setBusy(null);
         if (res.ok) enter(res.code, res.playerId);
         else setError(res.error);
+      });
+    } else if (mode === "streak") {
+      // A sequência tem tela própria: não há placar, rodadas nem chat para a
+      // página da sala desenhar, e o que interessa é um número só.
+      getSocket().emit("createStreak", payload, (res) => {
+        setBusy(null);
+        if (res.ok) {
+          rememberPlayer(res.code, res.playerId);
+          router.push(`/streak/${res.code}`);
+        } else setError(res.error);
       });
     } else if (mode === "challenge") {
       getSocket().emit("createChallenge", payload, (res) => {
@@ -329,8 +339,9 @@ export default function HomePage() {
         onPlay={() => start("daily")}
       />
 
-      {/* Modos */}
-      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {/* Modos — cinco cartões: em três colunas eles ficam 3+2 em vez de
+          deixar um sozinho numa linha de quatro. */}
+      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <ModeCard
           title="Jogar solo"
           description="Partida sozinho. A pontuação entra no ranking e conta pro seu streak."
@@ -347,6 +358,14 @@ export default function HomePage() {
           disabled={!ready}
           loading={busy === "duel"}
           onClick={() => start("duel")}
+        />
+        <ModeCard
+          title="Sequência de países"
+          description="Acertou o país, vem outro lugar. Errou, acabou — o que fica é o recorde."
+          action="Começar a sequência"
+          disabled={!ready}
+          loading={busy === "streak"}
+          onClick={() => start("streak")}
         />
         <ModeCard
           title="Sala com amigos"
